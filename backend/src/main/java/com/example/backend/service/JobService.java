@@ -9,7 +9,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 @RequiredArgsConstructor
@@ -115,5 +117,23 @@ public class JobService {
             return repo.findByUserIdAndCompanyIgnoreCase(userId, company);
         }
         return repo.findByUserIdAndStatusAndCompanyIgnoreCase(userId, status, company);
+    }
+
+    public Map<String, Long> getStats(String username) {
+        User user = userRepo.findByUsername(username).orElseThrow();
+        Long userId = user.getId();
+
+        long total = repo.countByUserId(userId);
+        long applied = repo.countByUserIdAndStatus(userId, "Applied");
+        long rejected = repo.countByUserIdAndStatus(userId, "Rejected");
+        long selected = repo.countByUserIdAndStatus(userId, "Selected");
+
+        Map<String, Long> stats = new HashMap<>();
+        stats.put("total", total);
+        stats.put("applied", applied);
+        stats.put("rejected", rejected);
+        stats.put("selected", selected);
+
+        return stats;
     }
 }

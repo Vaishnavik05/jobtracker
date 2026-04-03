@@ -15,4 +15,7 @@ public interface JobRepository extends JpaRepository<Job, Long> {
     List<Job> findByUserIdAndCompanyIgnoreCase(Long userId, String company);
     
     List<Job> findByUserIdAndStatusAndCompanyIgnoreCase(Long userId, String status, String company);
+    
+    long countByUserId(Long userId);
+    long countByUserIdAndStatus(Long userId, String status);
 }

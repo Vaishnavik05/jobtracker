@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Navigate, Route, Routes } from "react-router-dom";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import { useAuth } from "./context/AuthContext";
+import api from './api/client';
+import './App.css';
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/$/, '')
-const API_URL = `${API_BASE_URL}/api/applications`
 const STATUS_OPTIONS = ['Applied', 'Interview', 'Offer', 'Rejected']
-const STATUS_COLORS = {
-  Applied: 'badge-info',
-  Interview: 'badge-warning',
-  Offer: 'badge-success',
-  Rejected: 'badge-error',
+const STATUS_BADGE_COLORS = {
+  Applied: 'bg-blue-100 text-blue-800',
+  Interview: 'bg-yellow-100 text-yellow-800',
+  Offer: 'bg-green-100 text-green-800',
+  Rejected: 'bg-red-100 text-red-800',
 }
 
 const emptyForm = {
@@ -19,29 +23,34 @@ const emptyForm = {
 }
 
 async function request(path = '', options = {}) {
-  const response = await fetch(`${API_URL}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  })
+  try {
+    const response = await fetch(`http://localhost:8080/api/applications${path}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        ...(options.headers || {}),
+      },
+      ...options,
+    })
 
-  if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || `Request failed with status ${response.status}`)
-  }
+    if (!response.ok) {
+      const message = await response.text()
+      throw new Error(message || `Request failed with status ${response.status}`)
+    }
 
-  if (response.status === 204) {
+    if (response.status === 204) {
+      return null
+    }
+
+    const contentType = response.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) {
+      return response.json()
+    }
+
     return null
+  } catch (err) {
+    throw err
   }
-
-  const contentType = response.headers.get('content-type') || ''
-  if (contentType.includes('application/json')) {
-    return response.json()
-  }
-
-  return null
 }
 
 function formatDate(value) {
@@ -55,7 +64,13 @@ function formatDate(value) {
   })
 }
 
-export default function App() {
+function ProtectedRoute({ children }) {
+  const { token } = useAuth();
+  return token ? children : <Navigate to="/login" replace />;
+}
+
+function Dashboard() {
+  const { logout, token } = useAuth()
   const [applications, setApplications] = useState([])
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState(null)
@@ -81,17 +96,18 @@ export default function App() {
   }
 
   useEffect(() => {
-    loadApplications()
-  }, [filterStatus])
+    if (token) {
+      loadApplications()
+    }
+  }, [filterStatus, token])
 
   const stats = useMemo(() => {
-    const byStatus = STATUS_OPTIONS.reduce((acc, status) => {
-      acc[status] = applications.filter((item) => item.status === status).length
-      return acc
-    }, {})
     return {
       total: applications.length,
-      byStatus,
+      applied: applications.filter(a => a.status === 'Applied').length,
+      interview: applications.filter(a => a.status === 'Interview').length,
+      offer: applications.filter(a => a.status === 'Offer').length,
+      rejected: applications.filter(a => a.status === 'Rejected').length,
     }
   }, [applications])
 
@@ -190,386 +206,319 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-blue-600">My Job Applications</h1>
-              <p className="text-sm text-slate-600 mt-1">Track your job search journey</p>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg flex items-center justify-center">
+                <span className="text-white text-lg font-bold">J</span>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Job Tracker</h1>
+                <p className="text-xs text-gray-500">Track your applications</p>
+              </div>
             </div>
             <button
-              className={`btn gap-2 ${showForm ? 'btn-outline' : 'btn-primary'}`}
-              onClick={() => {
-                if (!showForm) {
-                  resetForm()
-                }
-                setShowForm(!showForm)
-              }}
+              onClick={logout}
+              className="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium border border-gray-300 rounded-full hover:bg-gray-100 transition"
             >
-              {showForm ? (
-                <>
-                  <span>✕</span> Close Form
-                </>
-              ) : (
-                <>
-                  <span>+</span> Add Application
-                </>
-              )}
+              Logout
             </button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Alerts */}
         {error && (
-          <div className="alert alert-error shadow-lg mb-6 border-l-4">
-            <div className="flex items-center gap-3">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6 shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l-2-2m0 0l-2-2m2 2l2-2m-2 2l-2 2m8-8l2 2m0 0l2 2m-2-2l-2 2m2-2l2-2" />
-              </svg>
-              <span>{error}</span>
-              <button
-                className="ml-auto btn btn-sm btn-ghost"
-                onClick={() => setError('')}
-              >
-                ✕
-              </button>
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex gap-3 items-start">
+            <svg className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <div className="flex-1">
+              <p className="text-red-800 text-sm font-medium">{error}</p>
             </div>
+            <button onClick={() => setError('')} className="text-red-600 hover:text-red-900">✕</button>
           </div>
         )}
         {success && (
-          <div className="alert alert-success shadow-lg mb-6 border-l-4">
-            <div className="flex items-center gap-3">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6 shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>{success}</span>
-              <button
-                className="ml-auto btn btn-sm btn-ghost"
-                onClick={() => setSuccess('')}
-              >
-                ✕
-              </button>
+          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex gap-3 items-start">
+            <svg className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <div className="flex-1">
+              <p className="text-green-800 text-sm font-medium">{success}</p>
             </div>
+            <button onClick={() => setSuccess('')} className="text-green-600 hover:text-green-900">✕</button>
           </div>
         )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
-          <div className="stat bg-white shadow rounded-lg border border-slate-200">
-            <div className="stat-figure text-primary">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-8 w-8"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 10 15.5 10 14 10.67 14 11.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 10 8.5 10 7 10.67 7 11.5 7.67 13 8.5 13z" />
-              </svg>
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm font-medium">Total Apps</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.total}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <span className="text-2xl">📋</span>
+              </div>
             </div>
-            <div className="stat-title">Total Applications</div>
-            <div className="stat-value text-2xl text-primary font-bold">{stats.total}</div>
           </div>
 
-          <div className="stat bg-white shadow rounded-lg border border-slate-200">
-            <div className="stat-figure text-info">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-8 w-8"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-              </svg>
+          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm font-medium">Applied</p>
+                <p className="text-3xl font-bold text-blue-600 mt-2">{stats.applied}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <span className="text-2xl">✓</span>
+              </div>
             </div>
-            <div className="stat-title">Applied</div>
-            <div className="stat-value text-2xl text-info font-bold">{stats.byStatus.Applied}</div>
           </div>
 
-          <div className="stat bg-white shadow rounded-lg border border-slate-200">
-            <div className="stat-figure text-warning">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-8 w-8"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8zm0 18c-3.35 0-6-2.57-6-6.2 0-2.34 1.95-5.44 6-9.14 4.05 3.7 6 6.79 6 9.14 0 3.63-2.65 6.2-6 6.2z" />
-              </svg>
+          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm font-medium">Interviews</p>
+                <p className="text-3xl font-bold text-yellow-600 mt-2">{stats.interview}</p>
+              </div>
+              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <span className="text-2xl">🎯</span>
+              </div>
             </div>
-            <div className="stat-title">Interviews</div>
-            <div className="stat-value text-2xl text-warning font-bold">{stats.byStatus.Interview}</div>
           </div>
 
-          <div className="stat bg-white shadow rounded-lg border border-slate-200">
-            <div className="stat-figure text-success">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-8 w-8"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-              </svg>
+          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm font-medium">Offers</p>
+                <p className="text-3xl font-bold text-green-600 mt-2">{stats.offer}</p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <span className="text-2xl">🏆</span>
+              </div>
             </div>
-            <div className="stat-title">Offers</div>
-            <div className="stat-value text-2xl text-success font-bold">{stats.byStatus.Offer}</div>
           </div>
 
-          <div className="stat bg-white shadow rounded-lg border border-slate-200">
-            <div className="stat-figure text-error">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-8 w-8"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" />
-              </svg>
+          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm font-medium">Rejected</p>
+                <p className="text-3xl font-bold text-red-600 mt-2">{stats.rejected}</p>
+              </div>
+              <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <span className="text-2xl">✕</span>
+              </div>
             </div>
-            <div className="stat-title">Rejected</div>
-            <div className="stat-value text-2xl text-error font-bold">{stats.byStatus.Rejected}</div>
           </div>
         </div>
 
-        {/* Form */}
+        {/* Add Form Card */}
         {showForm && (
-          <div className="card bg-white shadow-lg border border-slate-200 mb-8">
-            <div className="card-body p-6">
-              <h2 className="card-title text-2xl font-bold text-slate-800 mb-6">
-                {editingId ? '✎ Edit Application' : '+ Add New Application'}
-              </h2>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text font-semibold text-slate-700">Company Name</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="company"
-                      placeholder="e.g., Google, Microsoft, Amazon"
-                      className="input input-bordered input-lg focus:input-primary"
-                      value={form.company}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text font-semibold text-slate-700">Job Title</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="role"
-                      placeholder="e.g., Senior Frontend Developer"
-                      className="input input-bordered input-lg focus:input-primary"
-                      value={form.role}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text font-semibold text-slate-700">Status</span>
-                    </label>
-                    <select
-                      name="status"
-                      className="select select-bordered select-lg focus:select-primary"
-                      value={form.status}
-                      onChange={handleChange}
-                    >
-                      {STATUS_OPTIONS.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text font-semibold text-slate-700">Applied Date</span>
-                    </label>
-                    <input
-                      type="date"
-                      name="appliedDate"
-                      className="input input-bordered input-lg focus:input-primary"
-                      value={form.appliedDate}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="form-control">
-                  <label className="label">
-                    <span className="label-text font-semibold text-slate-700">Notes</span>
-                  </label>
-                  <textarea
-                    name="notes"
-                    placeholder="Interview feedback, referral info, follow-up date..."
-                    className="textarea textarea-bordered textarea-lg focus:textarea-primary h-24"
-                    value={form.notes}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-lg p-8 mb-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">
+              {editingId ? '✏️ Edit Application' : '➕ Add New Application'}
+            </h2>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Company Name *</label>
+                  <input
+                    type="text"
+                    name="company"
+                    placeholder="e.g., Google, Amazon, Microsoft"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={form.company}
                     onChange={handleChange}
+                    required
                   />
-                  <label className="label">
-                    <span className="label-text-alt text-slate-500">Share any relevant notes</span>
-                  </label>
                 </div>
 
-                <div className="card-actions justify-end gap-3">
-                  <button type="button" className="btn btn-outline text-base" onClick={resetForm}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary text-base">
-                    {editingId ? '💾 Update Application' : '✓ Add Application'}
-                  </button>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Job Title *</label>
+                  <input
+                    type="text"
+                    name="role"
+                    placeholder="e.g., Senior Frontend Developer"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={form.role}
+                    onChange={handleChange}
+                    required
+                  />
                 </div>
-              </form>
-            </div>
-          </div>
-        )}
 
-        {/* Filters and Search */}
-        <div className="card bg-white shadow border border-slate-200 mb-8">
-          <div className="card-body p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text font-semibold text-slate-700">🔍 Search</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Search by company or job title..."
-                  className="input input-bordered input-lg focus:input-primary"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Status *</label>
+                  <select
+                    name="status"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={form.status}
+                    onChange={handleChange}
+                  >
+                    {STATUS_OPTIONS.map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Applied Date *</label>
+                  <input
+                    type="date"
+                    name="appliedDate"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={form.appliedDate}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                <textarea
+                  name="notes"
+                  placeholder="Interview feedback, referral info, follow-up date..."
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent h-24"
+                  value={form.notes}
+                  onChange={handleChange}
                 />
               </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text font-semibold text-slate-700">📋 Filter by Status</span>
-                </label>
-                <select
-                  className="select select-bordered select-lg focus:select-primary"
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition"
                 >
-                  <option value="All">All Status</option>
-                  {STATUS_OPTIONS.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition"
+                >
+                  {editingId ? '💾 Update' : '✓ Add Application'}
+                </button>
               </div>
+            </form>
+          </div>
+        )}
+
+        {/* Search and Filters */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">🔍 Search</label>
+              <input
+                type="text"
+                placeholder="Search by company or title..."
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">📋 Filter by Status</label>
+              <select
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+              >
+                <option value="All">All Status</option>
+                {STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-end">
+              <button
+                onClick={() => { resetForm(); setShowForm(true) }}
+                className="w-full bg-blue-600 text-white font-medium py-2 rounded-lg hover:bg-blue-700 transition"
+              >
+                ➕ Add Application
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Applications Table */}
-        <div className="card bg-white shadow border border-slate-200">
-          <div className="card-body p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="card-title text-2xl font-bold text-slate-800">
-                📝 Job Applications ({filteredApplications.length})
-              </h2>
-            </div>
+        {/* Applications List */}
+        <div className="space-y-4">
+          <h2 className="text-xl font-bold text-gray-900">
+            📝 Applications ({filteredApplications.length})
+          </h2>
 
-            {loading ? (
-              <div className="flex justify-center py-12">
-                <span className="loading loading-spinner loading-lg text-primary"></span>
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <div className="text-gray-500">Loading...</div>
+            </div>
+          ) : filteredApplications.length === 0 ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+              <p className="text-blue-900">No applications found. {searchTerm && 'Try adjusting your search.'}</p>
+            </div>
+          ) : (
+            filteredApplications.map((app) => (
+              <div key={app.id} className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg transition flex justify-between items-start">
+                <div className="flex-1">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">{app.company}</h3>
+                      <p className="text-gray-600 font-medium">{app.role}</p>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${STATUS_BADGE_COLORS[app.status]}`}>
+                      {app.status}
+                    </span>
+                  </div>
+                  
+                  <div className="flex gap-6 text-sm text-gray-600 mb-3">
+                    <span>📅 {formatDate(app.appliedDate)}</span>
+                    {app.notes && <span className="max-w-md">📝 {app.notes.substring(0, 50)}...</span>}
+                  </div>
+                </div>
+
+                <div className="flex gap-2 ml-4">
+                  <button
+                    onClick={() => startEdit(app)}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition"
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(app.id)}
+                    className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 font-medium transition"
+                  >
+                    🗑️ Delete
+                  </button>
+                </div>
               </div>
-            ) : filteredApplications.length === 0 ? (
-              <div className="alert alert-info border-l-4">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  className="h-6 w-6 shrink-0 stroke-current"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  ></path>
-                </svg>
-                <span>No applications found. {searchTerm && 'Try adjusting your search.'}</span>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="table table-zebra w-full">
-                  <thead className="bg-slate-100">
-                    <tr className="border-b-2 border-slate-300">
-                      <th className="text-slate-700 font-bold">Company</th>
-                      <th className="text-slate-700 font-bold">Job Title</th>
-                      <th className="text-slate-700 font-bold">Status</th>
-                      <th className="text-slate-700 font-bold">Applied Date</th>
-                      <th className="text-slate-700 font-bold">Notes</th>
-                      <th className="text-slate-700 font-bold text-center">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredApplications.map((app) => (
-                      <tr key={app.id} className="hover:bg-slate-50 border-b border-slate-200">
-                        <td className="font-bold text-slate-800">{app.company}</td>
-                        <td className="text-slate-700">{app.role}</td>
-                        <td>
-                          <div className={`badge badge-lg ${STATUS_COLORS[app.status]} text-white font-semibold`}>
-                            {app.status}
-                          </div>
-                        </td>
-                        <td className="text-slate-600">{formatDate(app.appliedDate)}</td>
-                        <td className="truncate max-w-xs text-slate-600">
-                          {app.notes ? app.notes.substring(0, 30) + '...' : '-'}
-                        </td>
-                        <td>
-                          <div className="flex gap-2 justify-center">
-                            <button
-                              className="btn btn-sm btn-outline text-primary hover:bg-primary hover:text-white"
-                              onClick={() => startEdit(app)}
-                              title="Edit this application"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              className="btn btn-sm btn-outline text-error hover:bg-error hover:text-white"
-                              onClick={() => handleDelete(app.id)}
-                              title="Delete this application"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+            ))
+          )}
         </div>
       </div>
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
   )
 }

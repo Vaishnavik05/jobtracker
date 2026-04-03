@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/applications")
@@ -75,5 +76,11 @@ public class JobController {
     public ResponseEntity<Void> deleteApplication(@PathVariable Long id, Authentication auth) {
         jobService.deleteByIdAndUser(id, auth.getName());
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/stats")
+    public ResponseEntity<Map<String, Long>> getStats(Authentication auth) {
+        String username = auth.getName();
+        return ResponseEntity.ok(jobService.getStats(username));
     }
 }
