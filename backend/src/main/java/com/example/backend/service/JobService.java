@@ -1,13 +1,16 @@
 package com.example.backend.service;
 
 import com.example.backend.model.Job;
+import com.example.backend.model.User;
 import com.example.backend.repository.JobRepository;
 import com.example.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import java.util.Objects;
+import org.springframework.web.server.ResponseStatusException;
+
 import java.util.List;
-import java.util.Optional;
+import java.util.Objects;
 
 @RequiredArgsConstructor
 @Service
@@ -16,37 +19,101 @@ public class JobService {
     private final JobRepository repo;
     private final UserRepository userRepo;
 
-    public List<Job> getJobs(Long userId) {
-        return repo.findByUserId(userId);
-    }
-
     public List<Job> getJobsByUsername(String username) {
-        Long userId = Long.valueOf(
-            userRepo.findByUsername(Objects.requireNonNull(username, "username must not be null"))
-                .orElseThrow(() -> new IllegalArgumentException("User not found: " + username))
-                .getId()
-        );
-        return repo.findByUserId(userId);
-    }
-
-    public Optional<Job> getJobById(Long id) {
-        return repo.findById(Objects.requireNonNull(id, "id must not be null"));
-    }
-
-    public Job save(Job job) {
-        Job application = Objects.requireNonNull(job, "job must not be null");
-        return repo.save(application);
+        User user = userRepo.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        Long userId = user.getId();
+        return userId != null ? repo.findByUserId(userId) : List.of();
     }
 
     public Job saveWithUser(Job job, String username) {
-        var user = userRepo.findByUsername(Objects.requireNonNull(username, "username must not be null"))
-                .orElseThrow(() -> new IllegalArgumentException("User not found: " + username));
-        Job application = Objects.requireNonNull(job, "job must not be null");
-        application.setUser(user);
-        return repo.save(application);
+        User user = userRepo.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        if (job != null && user != null) {
+            job.setUser(user);
+            return repo.save(job);
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid job or user");
+    }
+
+    public Job getJobById(Long id) {
+        if (id == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job ID is required");
+        }
+        return repo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
+    }
+
+    public Job getJobByIdAndUser(Long id, String username) {
+        if (id == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job ID is required");
+        }
+        User user = userRepo.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        Job job = repo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
+        
+        Long jobUserId = job.getUser() != null ? job.getUser().getId() : null;
+        Long userId = user.getId();
+        
+        if (!Objects.equals(jobUserId, userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not authorized");
+        }
+        return job;
+    }
+
+    public Job update(Job job) {
+        if (job == null || job.getId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid job");
+        }
+        return repo.save(job);
     }
 
     public void delete(Long id) {
-        repo.deleteById(Objects.requireNonNull(id, "id must not be null"));
+        if (id == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job ID is required");
+        }
+        if (!repo.existsById(id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found");
+        }
+        repo.deleteById(id);
+    }
+
+    public void deleteByIdAndUser(Long id, String username) {
+        if (id == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job ID is required");
+        }
+        getJobByIdAndUser(id, username);
+        repo.deleteById(id);
+    }
+
+    public List<Job> getJobsByUserIdAndStatus(Long userId, String status) {
+        if (userId == null || status == null || status.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User ID and status are required");
+        }
+        return repo.findByUserIdAndStatus(userId, status);
+    }
+
+    public List<Job> getJobsByUserIdAndCompany(Long userId, String company) {
+        if (userId == null || company == null || company.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User ID and company are required");
+        }
+        return repo.findByUserIdAndCompanyIgnoreCase(userId, company);
+    }
+
+    public List<Job> getJobsByUserIdStatusAndCompany(Long userId, String status, String company) {
+        if (userId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User ID is required");
+        }
+        if ((status == null || status.isEmpty()) && (company == null || company.isEmpty())) {
+            return repo.findByUserId(userId);
+        }
+        if (status != null && !status.isEmpty() && (company == null || company.isEmpty())) {
+            return repo.findByUserIdAndStatus(userId, status);
+        }
+        if ((status == null || status.isEmpty()) && company != null && !company.isEmpty()) {
+            return repo.findByUserIdAndCompanyIgnoreCase(userId, company);
+        }
+        return repo.findByUserIdAndStatusAndCompanyIgnoreCase(userId, status, company);
     }
 }

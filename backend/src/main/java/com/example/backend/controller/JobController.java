@@ -1,14 +1,17 @@
 package com.example.backend.controller;
-
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.RequestParam;
 import com.example.backend.model.Job;
+import com.example.backend.model.User;
 import com.example.backend.service.JobService;
+import com.example.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+
 import java.util.List;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/applications")
@@ -17,47 +20,60 @@ import java.util.Optional;
 public class JobController {
 
     private final JobService jobService;
+    private final UserRepository userRepository;
 
     @GetMapping
-    public ResponseEntity<List<Job>> getAllApplications(Authentication auth) {
+    public ResponseEntity<List<Job>> getAllApplications(
+            Authentication auth,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String company) {
+        
         String username = auth.getName();
-        List<Job> applications = jobService.getJobsByUsername(username);
-        return ResponseEntity.ok(applications);
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        
+        List<Job> jobs;
+        if (status != null && !status.isEmpty() && company != null && !company.isEmpty()) {
+            jobs = jobService.getJobsByUserIdStatusAndCompany(user.getId(), status, company);
+        } else if (status != null && !status.isEmpty()) {
+            jobs = jobService.getJobsByUserIdAndStatus(user.getId(), status);
+        } else if (company != null && !company.isEmpty()) {
+            jobs = jobService.getJobsByUserIdAndCompany(user.getId(), company);
+        } else {
+            jobs = jobService.getJobsByUsername(username);
+        }
+        
+        return ResponseEntity.ok(jobs);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Job> getApplicationById(@PathVariable Long id) {
-        Optional<Job> job = jobService.getJobById(id);
-        return job.map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+    public ResponseEntity<Job> getApplicationById(@PathVariable Long id, Authentication auth) {
+        Job job = jobService.getJobByIdAndUser(id, auth.getName());
+        return ResponseEntity.ok(job);
     }
 
     @PostMapping
     public ResponseEntity<Job> createApplication(Authentication auth, @RequestBody Job job) {
         String username = auth.getName();
-        Job savedJob = jobService.saveWithUser(job, username);
-        return ResponseEntity.status(HttpStatus.CREATED).body(savedJob);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(jobService.saveWithUser(job, username));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Job> updateApplication(@PathVariable Long id, @RequestBody Job jobDetails) {
-        Optional<Job> job = jobService.getJobById(id);
-        if (job.isPresent()) {
-            Job existingJob = job.get();
-            existingJob.setCompany(jobDetails.getCompany());
-            existingJob.setRole(jobDetails.getRole());
-            existingJob.setStatus(jobDetails.getStatus());
-            existingJob.setAppliedDate(jobDetails.getAppliedDate());
-            existingJob.setNotes(jobDetails.getNotes());
-            Job updatedJob = jobService.save(existingJob);
-            return ResponseEntity.ok(updatedJob);
-        }
-        return ResponseEntity.notFound().build();
+    public ResponseEntity<Job> updateApplication(@PathVariable Long id, @RequestBody Job jobDetails, Authentication auth) {
+        Job existingJob = jobService.getJobByIdAndUser(id, auth.getName());
+        existingJob.setCompany(jobDetails.getCompany());
+        existingJob.setRole(jobDetails.getRole());
+        existingJob.setStatus(jobDetails.getStatus());
+        existingJob.setAppliedDate(jobDetails.getAppliedDate());
+        existingJob.setNotes(jobDetails.getNotes());
+        Job updatedJob = jobService.update(existingJob);
+        return ResponseEntity.ok(updatedJob);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteApplication(@PathVariable Long id) {
-        jobService.delete(id);
+    public ResponseEntity<Void> deleteApplication(@PathVariable Long id, Authentication auth) {
+        jobService.deleteByIdAndUser(id, auth.getName());
         return ResponseEntity.noContent().build();
     }
 }
