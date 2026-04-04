@@ -3,8 +3,10 @@ package com.example.backend.controller;
 import com.example.backend.model.CompanyEvent;
 import com.example.backend.repository.CompanyEventRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -22,23 +24,46 @@ public class AdminEventController {
     }
 
     @PostMapping
-    public ResponseEntity<CompanyEvent> create(@RequestBody CompanyEvent event) {
+    public ResponseEntity<CompanyEvent> create(@RequestBody(required = false) CompanyEvent event) {
+        if (event == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Event payload is required");
+        }
         return ResponseEntity.ok(repo.save(event));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<CompanyEvent> update(@PathVariable Long id, @RequestBody CompanyEvent event) {
-        CompanyEvent existing = repo.findById(id).orElseThrow();
+    public ResponseEntity<CompanyEvent> update(
+            @PathVariable(required = false) Long id,
+            @RequestBody(required = false) CompanyEvent event
+    ) {
+        if (id == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Event id is required");
+        }
+        if (event == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Event payload is required");
+        }
+
+        CompanyEvent existing = repo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found"));
+
         existing.setCompanyName(event.getCompanyName());
         existing.setEventTitle(event.getEventTitle());
         existing.setDescription(event.getDescription());
         existing.setApplyUrl(event.getApplyUrl());
         existing.setEventDate(event.getEventDate());
+
         return ResponseEntity.ok(repo.save(existing));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable(required = false) Long id) {
+        if (id == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Event id is required");
+        }
+        if (!repo.existsById(id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found");
+        }
+
         repo.deleteById(id);
         return ResponseEntity.noContent().build();
     }

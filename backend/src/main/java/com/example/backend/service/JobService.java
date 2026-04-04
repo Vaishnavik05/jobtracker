@@ -156,16 +156,24 @@ public class JobService {
     }
 
     public Job updateForAdmin(Long id, Job payload, String username) {
+        if (id == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job id is required");
+        }
+        if (payload == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid job payload");
+        }
+
         Job existing = repo.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
 
-        existing.setCompany(payload.getCompany());
-        existing.setRole(payload.getRole());
-        existing.setStatus(payload.getStatus());
-        existing.setAppliedDate(payload.getAppliedDate());
-        existing.setNotes(payload.getNotes());
+        // Keep existing value if incoming field is null
+        existing.setCompany(payload.getCompany() != null ? payload.getCompany() : existing.getCompany());
+        existing.setRole(payload.getRole() != null ? payload.getRole() : existing.getRole());
+        existing.setStatus(payload.getStatus() != null ? payload.getStatus() : existing.getStatus());
+        existing.setAppliedDate(payload.getAppliedDate() != null ? payload.getAppliedDate() : existing.getAppliedDate());
+        existing.setNotes(payload.getNotes() != null ? payload.getNotes() : existing.getNotes());
 
-        // Keep it public
+        // Admin updates should remain public postings
         existing.setUser(null);
 
         return repo.save(existing);
