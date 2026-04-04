@@ -1,67 +1,96 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import { useAuth } from "./context/AuthContext";
-import api from './api/client';
-import './App.css';
+import "./App.css";
+import AdminDashboard from "./pages/AdminDashboard";
 
-const STATUS_OPTIONS = ['Applied', 'Interview', 'Offer', 'Rejected']
+const STATUS_OPTIONS = [
+  "Online Test",
+  "Group Discussion",
+  "Technical Interview",
+  "HR Interview",
+];
+
 const STATUS_BADGE_COLORS = {
-  Applied: 'bg-blue-100 text-blue-800',
-  Interview: 'bg-yellow-100 text-yellow-800',
-  Offer: 'bg-green-100 text-green-800',
-  Rejected: 'bg-red-100 text-red-800',
-}
+  "Online Test": "bg-blue-100 text-blue-800",
+  "Group Discussion": "bg-purple-100 text-purple-800",
+  "Technical Interview": "bg-amber-100 text-amber-800",
+  "HR Interview": "bg-emerald-100 text-emerald-800",
+};
+
+const STATUS_CHART_COLORS = {
+  "Online Test": "#3b82f6",
+  "Group Discussion": "#8b5cf6",
+  "Technical Interview": "#f59e0b",
+  "HR Interview": "#10b981",
+};
 
 const emptyForm = {
-  company: '',
-  role: '',
-  status: 'Applied',
-  appliedDate: '',
-  notes: '',
-}
+  company: "",
+  role: "",
+  status: "Online Test",
+  appliedDate: "",
+  notes: "",
+};
 
-async function request(path = '', options = {}) {
-  try {
-    const response = await fetch(`http://localhost:8080/api/applications${path}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        ...(options.headers || {}),
-      },
-      ...options,
-    })
+async function request(path = "", options = {}) {
+  const token = sessionStorage.getItem("token");
 
-    if (!response.ok) {
-      const message = await response.text()
-      throw new Error(message || `Request failed with status ${response.status}`)
+  const response = await fetch(`http://localhost:8080/api/applications${path}`, {
+    ...options,
+    headers: {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      sessionStorage.removeItem("token");
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
+      throw new Error("Session expired. Please login again.");
     }
 
-    if (response.status === 204) {
-      return null
+    let message = "Request failed";
+    try {
+      const err = await response.json();
+      message = err?.message || message;
+    } catch {
+      const text = await response.text();
+      if (text) message = text;
     }
-
-    const contentType = response.headers.get('content-type') || ''
-    if (contentType.includes('application/json')) {
-      return response.json()
-    }
-
-    return null
-  } catch (err) {
-    throw err
+    throw new Error(message);
   }
+
+  if (response.status === 204) return null;
+
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) return response.json();
+
+  return response.text();
 }
 
 function formatDate(value) {
-  if (!value) return '-'
-  const date = new Date(`${value}T00:00:00`)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
+  if (!value) return "-";
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function normalizeApplications(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.content)) return data.content;
+  if (Array.isArray(data?.applications)) return data.applications;
+  return [];
 }
 
 function ProtectedRoute({ children }) {
@@ -69,89 +98,199 @@ function ProtectedRoute({ children }) {
   return token ? children : <Navigate to="/login" replace />;
 }
 
-function Dashboard() {
-  const { logout, token } = useAuth()
-  const [applications, setApplications] = useState([])
-  const [form, setForm] = useState(emptyForm)
-  const [editingId, setEditingId] = useState(null)
-  const [filterStatus, setFilterStatus] = useState('All')
-  const [searchTerm, setSearchTerm] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
-  const [showForm, setShowForm] = useState(false)
+function ApplicationsBarChart({ data }) {
+  const max = Math.max(1, ...data.map((item) => item.value));
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+      <h3 className="text-lg font-bold text-gray-900 mb-4">Applications by Stage (Bar)</h3>
+      <div className="space-y-4">
+        {data.map((item) => {
+          const width = (item.value / max) * 100;
+          return (
+            <div key={item.label}>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="font-medium text-gray-700">{item.label}</span>
+                <span className="font-semibold text-gray-900">{item.value}</span>
+              </div>
+              <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-3 rounded-full transition-all duration-500"
+                  style={{ width: `${width}%`, backgroundColor: item.color }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ApplicationsPieChart({ data }) {
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+
+  let cumulative = 0;
+  const segments = data
+    .map((item) => {
+      const start = total ? (cumulative / total) * 360 : 0;
+      cumulative += item.value;
+      const end = total ? (cumulative / total) * 360 : 0;
+      return `${item.color} ${start}deg ${end}deg`;
+    })
+    .join(", ");
+
+  const pieStyle = {
+    background: total
+      ? `conic-gradient(${segments})`
+      : "conic-gradient(#e5e7eb 0deg 360deg)",
+  };
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+      <h3 className="text-lg font-bold text-gray-900 mb-4">Applications by Stage (Pie)</h3>
+      <div className="flex items-center gap-6">
+        <div className="relative w-44 h-44 rounded-full" style={pieStyle}>
+          <div className="absolute inset-10 bg-white rounded-full flex items-center justify-center">
+            <span className="text-sm font-semibold text-gray-700">Total {total}</span>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {data.map((item) => (
+            <div key={item.label} className="flex items-center gap-2 text-sm">
+              <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: item.color }} />
+              <span className="text-gray-700">{item.label}</span>
+              <span className="font-semibold text-gray-900">{item.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DashboardContent({ title, subtitle, showCharts = false }) {
+  const { logout, token } = useAuth();
+  const [applications, setApplications] = useState([]);
+  const [form, setForm] = useState(emptyForm);
+  const [filterStatus, setFilterStatus] = useState("All");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [showForm, setShowForm] = useState(false);
+
+  const [publicJobs, setPublicJobs] = useState([]);
+  const [showPublicJobs, setShowPublicJobs] = useState(false);
+  const [publicLoading, setPublicLoading] = useState(false);
+  const [publicError, setPublicError] = useState("");
+  const [applyingId, setApplyingId] = useState(null);
 
   const loadApplications = async () => {
-    setLoading(true)
-    setError('')
+    setLoading(true);
+    setError("");
     try {
-      const query = filterStatus === 'All' ? '' : `?status=${encodeURIComponent(filterStatus)}`
-      const data = await request(query)
-      setApplications(Array.isArray(data) ? data : [])
+      const data = await request("", { method: "GET" });
+      setApplications(normalizeApplications(data));
     } catch (err) {
-      setError(err.message || 'Unable to load applications')
+      setError(err instanceof Error ? err.message : "Failed to load applications");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
+
+  const loadPublicJobs = async () => {
+    setPublicLoading(true);
+    setPublicError("");
+    try {
+      const data = await request("/public-jobs", { method: "GET" });
+      setPublicJobs(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setPublicError(err instanceof Error ? err.message : "Failed to load jobs posted by admin");
+    } finally {
+      setPublicLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (token) {
-      loadApplications()
+    if (!token) {
+      setApplications([]);
+      return;
     }
-  }, [filterStatus, token])
+    void loadApplications();
+  }, [token]);
 
   const stats = useMemo(() => {
-    return {
-      total: applications.length,
-      applied: applications.filter(a => a.status === 'Applied').length,
-      interview: applications.filter(a => a.status === 'Interview').length,
-      offer: applications.filter(a => a.status === 'Offer').length,
-      rejected: applications.filter(a => a.status === 'Rejected').length,
+    const total = applications.length;
+    const applied = applications.filter((application) => STATUS_OPTIONS.includes(application.status)).length;
+    const notApplied = total - applied;
+    const offers = applications.filter((application) => application.status === "HR Interview").length;
+    const rejected = applications.filter((application) => application.status === "Rejected").length;
+    return { total, applied, notApplied, offers, rejected };
+  }, [applications]);
+
+  const chartData = useMemo(() => {
+    const counts = STATUS_OPTIONS.reduce((accumulator, status) => {
+      accumulator[status] = 0;
+      return accumulator;
+    }, {});
+    for (const application of applications) {
+      if (Object.prototype.hasOwnProperty.call(counts, application.status)) {
+        counts[application.status] += 1;
+      }
     }
-  }, [applications])
+    return STATUS_OPTIONS.map((status) => ({
+      label: status,
+      value: counts[status],
+      color: STATUS_CHART_COLORS[status],
+    }));
+  }, [applications]);
 
   const filteredApplications = useMemo(() => {
-    return applications.filter(
-      (app) =>
-        app.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        app.role.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  }, [applications, searchTerm])
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    return applications.filter((application) => {
+      const company = String(application.company || "").toLowerCase();
+      const role = String(application.role || "").toLowerCase();
+
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        company.includes(normalizedSearch) ||
+        role.includes(normalizedSearch);
+
+      const matchesStatus = filterStatus === "All" || application.status === filterStatus;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [applications, searchTerm, filterStatus]);
+
+  useEffect(() => {
+    if (!success) return;
+    const timer = setTimeout(() => {
+      setSuccess("");
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [success]);
 
   const handleChange = (event) => {
-    const { name, value } = event.target
+    const name = event.target.name;
+    const value = event.target.value;
     setForm((current) => ({
       ...current,
       [name]: value,
-    }))
-  }
+    }));
+  };
 
   const resetForm = () => {
-    setForm(emptyForm)
-    setEditingId(null)
-    setError('')
-    setSuccess('')
-    setShowForm(false)
-  }
-
-  const startEdit = (application) => {
-    setEditingId(application.id)
-    setForm({
-      company: application.company || '',
-      role: application.role || '',
-      status: application.status || 'Applied',
-      appliedDate: application.appliedDate || '',
-      notes: application.notes || '',
-    })
-    setShowForm(true)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
+    setForm(emptyForm);
+    setError("");
+    setSuccess("");
+    setShowForm(false);
+  };
 
   const handleSubmit = async (event) => {
-    event.preventDefault()
-    setError('')
-    setSuccess('')
+    event.preventDefault();
+    setError("");
+    setSuccess("");
 
     const payload = {
       company: form.company.trim(),
@@ -159,66 +298,55 @@ function Dashboard() {
       status: form.status,
       appliedDate: form.appliedDate,
       notes: form.notes.trim(),
+    };
+
+    if (!payload.company || !payload.role || !payload.appliedDate) {
+      setError("Please fill in all required fields.");
+      return;
     }
 
     try {
-      if (editingId) {
-        await request(`/${editingId}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        })
-        setSuccess('Application updated successfully!')
-      } else {
-        await request('', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        })
-        setSuccess('Application added successfully!')
-      }
-
-      setForm(emptyForm)
-      setEditingId(null)
-      setShowForm(false)
-      await loadApplications()
+      await request("", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setSuccess("Application added successfully.");
+      setForm(emptyForm);
+      setShowForm(false);
+      await loadApplications();
     } catch (err) {
-      setError(err.message || 'Unable to save application')
+      setError(err instanceof Error ? err.message : "Failed to save application");
     }
-  }
+  };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this application?')) return
+  const handleViewJobs = async () => {
+    setShowPublicJobs(true);
+    await loadPublicJobs();
+  };
 
-    setError('')
-    setSuccess('')
-
+  const handleApplyToPublicJob = async (jobId) => {
+    setApplyingId(jobId);
+    setError("");
+    setSuccess("");
     try {
-      await request(`/${id}`, {
-        method: 'DELETE',
-      })
-      setSuccess('Application deleted successfully!')
-      if (editingId === id) {
-        resetForm()
-      }
-      await loadApplications()
+      await request("/apply/" + jobId, { method: "POST" });
+      setSuccess("Applied successfully.");
+      await Promise.all([loadApplications(), loadPublicJobs()]);
     } catch (err) {
-      setError(err.message || 'Unable to delete application')
+      setError(err instanceof Error ? err.message : "Failed to apply");
+    } finally {
+      setApplyingId(null);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg flex items-center justify-center">
-                <span className="text-white text-lg font-bold">J</span>
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Job Tracker</h1>
-                <p className="text-xs text-gray-500">Track your applications</p>
-              </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+              <p className="text-xs text-gray-500">{subtitle}</p>
             </div>
             <button
               onClick={logout}
@@ -231,99 +359,65 @@ function Dashboard() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Alerts */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex gap-3 items-start">
-            <svg className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
             <div className="flex-1">
               <p className="text-red-800 text-sm font-medium">{error}</p>
             </div>
-            <button onClick={() => setError('')} className="text-red-600 hover:text-red-900">✕</button>
+            <button onClick={() => setError("")} className="text-red-600 hover:text-red-900">
+              x
+            </button>
           </div>
         )}
+
         {success && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex gap-3 items-start">
-            <svg className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            <div className="flex-1">
-              <p className="text-green-800 text-sm font-medium">{success}</p>
+          <div className="fixed top-24 right-6 z-50">
+            <div className="inline-flex items-center gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 shadow-lg max-w-[90vw]">
+              <p className="text-sm font-semibold text-green-800 whitespace-nowrap">{success}</p>
+              <button
+                onClick={() => setSuccess("")}
+                className="ml-1 text-green-600 hover:text-green-900 leading-none"
+                aria-label="Close notification"
+              >
+                x
+              </button>
             </div>
-            <button onClick={() => setSuccess('')} className="text-green-600 hover:text-green-900">✕</button>
           </div>
         )}
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">Total Apps</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.total}</p>
-              </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">📋</span>
-              </div>
-            </div>
+          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+            <p className="text-gray-600 text-sm font-medium">Total Jobs</p>
+            <p className="text-3xl font-bold text-gray-900 mt-2">{stats.total}</p>
           </div>
-
-          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">Applied</p>
-                <p className="text-3xl font-bold text-blue-600 mt-2">{stats.applied}</p>
-              </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">✓</span>
-              </div>
-            </div>
+          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+            <p className="text-gray-600 text-sm font-medium">Applied Jobs</p>
+            <p className="text-3xl font-bold text-blue-600 mt-2">{stats.applied}</p>
           </div>
-
-          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">Interviews</p>
-                <p className="text-3xl font-bold text-yellow-600 mt-2">{stats.interview}</p>
-              </div>
-              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">🎯</span>
-              </div>
-            </div>
+          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+            <p className="text-gray-600 text-sm font-medium">Not Applied</p>
+            <p className="text-3xl font-bold text-yellow-600 mt-2">{stats.notApplied}</p>
           </div>
-
-          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">Offers</p>
-                <p className="text-3xl font-bold text-green-600 mt-2">{stats.offer}</p>
-              </div>
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">🏆</span>
-              </div>
-            </div>
+          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+            <p className="text-gray-600 text-sm font-medium">Offers</p>
+            <p className="text-3xl font-bold text-green-600 mt-2">{stats.offers}</p>
           </div>
-
-          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">Rejected</p>
-                <p className="text-3xl font-bold text-red-600 mt-2">{stats.rejected}</p>
-              </div>
-              <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">✕</span>
-              </div>
-            </div>
+          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+            <p className="text-gray-600 text-sm font-medium">Rejected</p>
+            <p className="text-3xl font-bold text-red-600 mt-2">{stats.rejected}</p>
           </div>
         </div>
 
-        {/* Add Form Card */}
+        {showCharts && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <ApplicationsBarChart data={chartData} />
+            <ApplicationsPieChart data={chartData} />
+          </div>
+        )}
+
         {showForm && (
           <div className="bg-white rounded-lg border border-gray-200 shadow-lg p-8 mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">
-              {editingId ? '✏️ Edit Application' : '➕ Add New Application'}
-            </h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Add New Application</h2>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
@@ -361,7 +455,9 @@ function Dashboard() {
                     onChange={handleChange}
                   >
                     {STATUS_OPTIONS.map((status) => (
-                      <option key={status} value={status}>{status}</option>
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -402,18 +498,17 @@ function Dashboard() {
                   type="submit"
                   className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition"
                 >
-                  {editingId ? '💾 Update' : '✓ Add Application'}
+                  Add Application
                 </button>
               </div>
             </form>
           </div>
         )}
 
-        {/* Search and Filters */}
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 mb-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">🔍 Search</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
               <input
                 type="text"
                 placeholder="Search by company or title..."
@@ -424,7 +519,7 @@ function Dashboard() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">📋 Filter by Status</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Status</label>
               <select
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 value={filterStatus}
@@ -432,27 +527,71 @@ function Dashboard() {
               >
                 <option value="All">All Status</option>
                 {STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>{status}</option>
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
                 ))}
               </select>
             </div>
 
             <div className="flex items-end">
               <button
-                onClick={() => { resetForm(); setShowForm(true) }}
+                onClick={handleViewJobs}
                 className="w-full bg-blue-600 text-white font-medium py-2 rounded-lg hover:bg-blue-700 transition"
               >
-                ➕ Add Application
+                View Jobs
               </button>
             </div>
           </div>
         </div>
 
-        {/* Applications List */}
+        {showPublicJobs && (
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 mb-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-2">New Jobs</h2>
+            <p className="text-sm text-gray-600 mb-4">Click Apply to submit your application.</p>
+
+            {publicError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {publicError}
+              </div>
+            )}
+
+            {publicLoading ? (
+              <div className="text-gray-500">Loading jobs...</div>
+            ) : publicJobs.length === 0 ? (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-blue-900 text-sm">
+                No admin-posted jobs available right now.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {publicJobs.map((job) => (
+                  <div
+                    key={job.id}
+                    className="border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+                  >
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{job.company || "Company"}</h3>
+                      <p className="text-gray-700">{job.role || "Role"}</p>
+                      <p className="text-xs text-gray-500 mt-1">{job.status || "Online Test"}</p>
+                      {job.notes ? <p className="text-sm text-gray-600 mt-1">{job.notes}</p> : null}
+                    </div>
+
+                    <button
+                      onClick={() => handleApplyToPublicJob(job.id)}
+                      disabled={applyingId === job.id}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-60"
+                    >
+                      {applyingId === job.id ? "Applying..." : "Apply"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="space-y-4">
-          <h2 className="text-xl font-bold text-gray-900">
-            📝 Applications ({filteredApplications.length})
-          </h2>
+          <h2 className="text-xl font-bold text-gray-900">Applications ({filteredApplications.length})</h2>
 
           {loading ? (
             <div className="flex justify-center py-12">
@@ -460,41 +599,38 @@ function Dashboard() {
             </div>
           ) : filteredApplications.length === 0 ? (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
-              <p className="text-blue-900">No applications found. {searchTerm && 'Try adjusting your search.'}</p>
+              <p className="text-blue-900">
+                No applications found. {searchTerm && "Try adjusting your search."}
+              </p>
             </div>
           ) : (
-            filteredApplications.map((app) => (
-              <div key={app.id} className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg transition flex justify-between items-start">
-                <div className="flex-1">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900">{app.company}</h3>
-                      <p className="text-gray-600 font-medium">{app.role}</p>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${STATUS_BADGE_COLORS[app.status]}`}>
-                      {app.status}
-                    </span>
+            filteredApplications.map((application) => (
+              <div
+                key={application.id}
+                className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg transition"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">{application.company}</h3>
+                    <p className="text-gray-600 font-medium">{application.role}</p>
                   </div>
-                  
-                  <div className="flex gap-6 text-sm text-gray-600 mb-3">
-                    <span>📅 {formatDate(app.appliedDate)}</span>
-                    {app.notes && <span className="max-w-md">📝 {app.notes.substring(0, 50)}...</span>}
-                  </div>
+                  <span
+                    className={
+                      "px-3 py-1 rounded-full text-sm font-semibold " +
+                      (STATUS_BADGE_COLORS[application.status] || "bg-gray-100 text-gray-700")
+                    }
+                  >
+                    {application.status}
+                  </span>
                 </div>
 
-                <div className="flex gap-2 ml-4">
-                  <button
-                    onClick={() => startEdit(app)}
-                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition"
-                  >
-                    ✏️ Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(app.id)}
-                    className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 font-medium transition"
-                  >
-                    🗑️ Delete
-                  </button>
+                <div className="flex gap-6 text-sm text-gray-600">
+                  <span>{formatDate(application.appliedDate)}</span>
+                  {application.notes && (
+                    <span className="max-w-md">
+                      {application.notes.length > 50 ? application.notes.slice(0, 50) + "..." : application.notes}
+                    </span>
+                  )}
                 </div>
               </div>
             ))
@@ -502,23 +638,62 @@ function Dashboard() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default function App() {
+function Dashboard() {
+  return (
+    <DashboardContent
+      title="Job Application Tracker"
+      subtitle="Track every application and stage"
+      showCharts={true}
+    />
+  );
+}
+
+function App() {
+  const { token, role } = useAuth();
+  const isAdmin = role === "ADMIN";
+
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route
+        path="/"
+        element={
+          token ? (
+            <Navigate to={isAdmin ? "/admin" : "/dashboard"} replace />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
       <Route path="/register" element={<Register />} />
+      <Route path="/login" element={<Login />} />
+
       <Route
         path="/dashboard"
         element={
           <ProtectedRoute>
-            <Dashboard />
+            {isAdmin ? <Navigate to="/admin" replace /> : <Dashboard />}
           </ProtectedRoute>
         }
       />
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute>
+            {isAdmin ? <AdminDashboard /> : <Navigate to="/dashboard" replace />}
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="*"
+        element={<Navigate to={token ? (isAdmin ? "/admin" : "/dashboard") : "/login"} replace />}
+      />
     </Routes>
-  )
+  );
 }
+
+export default App;

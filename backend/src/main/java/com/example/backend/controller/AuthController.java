@@ -1,19 +1,16 @@
 package com.example.backend.controller;
 
-import java.util.Map;
-import com.example.backend.model.RefreshToken;
 import com.example.backend.model.Role;
 import com.example.backend.model.User;
-import com.example.backend.repository.RefreshTokenRepository;
 import com.example.backend.repository.UserRepository;
-import com.example.backend.service.RefreshTokenService;
 import com.example.backend.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/auth")
@@ -22,49 +19,62 @@ import org.springframework.web.server.ResponseStatusException;
 public class AuthController {
 
     private final UserRepository repo;
-    private final RefreshTokenRepository refreshRepo;
-    private final RefreshTokenService refreshService;
     private final JwtUtil jwt;
     private final PasswordEncoder encoder;
 
     @PostMapping("/register")
-    public ResponseEntity<User> register(@RequestBody User user) {
-        user.setPassword(encoder.encode(user.getPassword()));
-        user.setRole(Role.USER);
-        return ResponseEntity.ok(repo.save(user));
+    public ResponseEntity<?> register(@RequestBody User user) {
+        String username = user.getUsername() == null ? "" : user.getUsername().trim();
+        String password = user.getPassword() == null ? "" : user.getPassword().trim();
+
+        if (username.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("message", "Username is required"));
+        }
+
+        if (password.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("message", "Password is required"));
+        }
+
+        if ("admin".equalsIgnoreCase(username)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Admin account is fixed. Please login with username admin and password 1234."));
+        }
+
+        if (repo.findByUsername(username).isPresent()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("message", "Username already exists"));
+        }
+
+        User newUser = new User();
+        newUser.setUsername(username);
+        newUser.setPassword(encoder.encode(password));
+        newUser.setRole(Role.USER);
+
+        User saved = repo.save(newUser);
+        return ResponseEntity.ok(Map.of(
+                "message", "Registration successful",
+                "username", saved.getUsername(),
+                "role", saved.getRole().name()
+        ));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<Map<String, String>> login(@RequestBody User user) {
+    public ResponseEntity<?> login(@RequestBody User user) {
+        String username = user.getUsername() == null ? "" : user.getUsername().trim();
+        String password = user.getPassword() == null ? "" : user.getPassword();
 
-        System.out.println("Login called");
-
-        User db = repo.findByUsername(user.getUsername())
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        System.out.println("User found: " + db.getUsername());
-
-        boolean match = encoder.matches(user.getPassword(), db.getPassword());
-        System.out.println("Password match: " + match);
-
-        if (!match) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
+        User db = repo.findByUsername(username).orElse(null);
+        if (db == null || !encoder.matches(password, db.getPassword())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Invalid credentials"));
         }
 
-        String token = jwt.generateToken(db.getUsername());
-        System.out.println("Token generated");
-
-        return ResponseEntity.ok(Map.of("token", token));
-    }
-
-    @PostMapping("/refresh")
-    public ResponseEntity<Map<String, String>> refresh(@RequestParam String token) {
-        RefreshToken rt = refreshRepo.findByToken(token)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid refresh token"));
-        if (!refreshService.isValid(rt)) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Expired refresh token");
-        }
-        String newAccess = jwt.generateToken(rt.getUser().getUsername());
-        return ResponseEntity.ok(Map.of("accessToken", newAccess));
+        String token = jwt.generateToken(db.getUsername(), db.getRole());
+        return ResponseEntity.ok(Map.of(
+                "token", token,
+                "role", db.getRole().name()
+        ));
     }
 }

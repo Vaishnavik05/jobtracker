@@ -379,3 +379,28 @@ tbody td {
     width: 100%;
   }
 }
+
+/* Force readable light form controls */
+input,
+select,
+textarea {
+  background-color: #94a6b7 !important;
+  color: #0f172a !important;
+  border: 1px solid #a1bfe4 !important;
+  -webkit-text-fill-color: #0f172a !important;
+  caret-color: #0f172a !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #64748b !important;
+  opacity: 1 !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18) !important;
+  outline: none !important;
+}

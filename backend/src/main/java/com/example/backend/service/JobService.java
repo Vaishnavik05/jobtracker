@@ -32,6 +32,7 @@ public class JobService {
         User user = userRepo.findByUsername(username)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
         if (job != null && user != null) {
+            job.setId(null);
             job.setUser(user);
             return repo.save(job);
         }
@@ -40,7 +41,7 @@ public class JobService {
 
     public Job getJobById(Long id) {
         if (id == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job ID is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job id is required");
         }
         return repo.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
@@ -48,32 +49,39 @@ public class JobService {
 
     public Job getJobByIdAndUser(Long id, String username) {
         if (id == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job ID is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job id is required");
         }
-        User user = userRepo.findByUsername(username)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
         Job job = repo.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
-        
+
+        if (isAdmin(username)) {
+            return job;
+        }
+
+        User user = userRepo.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
         Long jobUserId = job.getUser() != null ? job.getUser().getId() : null;
         Long userId = user.getId();
-        
+
         if (!Objects.equals(jobUserId, userId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not authorized");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to access this job");
         }
+
         return job;
     }
 
     public Job update(Job job) {
         if (job == null || job.getId() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid job");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job id is required");
         }
         return repo.save(job);
     }
 
     public void delete(Long id) {
         if (id == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job ID is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job id is required");
         }
         if (!repo.existsById(id)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found");
@@ -83,57 +91,152 @@ public class JobService {
 
     public void deleteByIdAndUser(Long id, String username) {
         if (id == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job ID is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job id is required");
         }
         getJobByIdAndUser(id, username);
         repo.deleteById(id);
     }
 
     public List<Job> getJobsByUserIdAndStatus(Long userId, String status) {
-        if (userId == null || status == null || status.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User ID and status are required");
+        if (userId == null) {
+            return List.of();
         }
         return repo.findByUserIdAndStatus(userId, status);
     }
 
     public List<Job> getJobsByUserIdAndCompany(Long userId, String company) {
-        if (userId == null || company == null || company.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User ID and company are required");
+        if (userId == null) {
+            return List.of();
         }
         return repo.findByUserIdAndCompanyIgnoreCase(userId, company);
     }
 
     public List<Job> getJobsByUserIdStatusAndCompany(Long userId, String status, String company) {
         if (userId == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User ID is required");
-        }
-        if ((status == null || status.isEmpty()) && (company == null || company.isEmpty())) {
-            return repo.findByUserId(userId);
-        }
-        if (status != null && !status.isEmpty() && (company == null || company.isEmpty())) {
-            return repo.findByUserIdAndStatus(userId, status);
-        }
-        if ((status == null || status.isEmpty()) && company != null && !company.isEmpty()) {
-            return repo.findByUserIdAndCompanyIgnoreCase(userId, company);
+            return List.of();
         }
         return repo.findByUserIdAndStatusAndCompanyIgnoreCase(userId, status, company);
     }
 
     public Map<String, Long> getStats(String username) {
-        User user = userRepo.findByUsername(username).orElseThrow();
-        Long userId = user.getId();
+        User user = userRepo.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-        long total = repo.countByUserId(userId);
-        long applied = repo.countByUserIdAndStatus(userId, "Applied");
-        long rejected = repo.countByUserIdAndStatus(userId, "Rejected");
-        long selected = repo.countByUserIdAndStatus(userId, "Selected");
+        Long userId = user.getId();
+        if (userId == null) return Map.of();
 
         Map<String, Long> stats = new HashMap<>();
-        stats.put("total", total);
-        stats.put("applied", applied);
-        stats.put("rejected", rejected);
-        stats.put("selected", selected);
+        stats.put("total", repo.countByUserId(userId));
+        stats.put("onlineTest", repo.countByUserIdAndStatus(userId, "Online Test"));
+        stats.put("groupDiscussion", repo.countByUserIdAndStatus(userId, "Group Discussion"));
+        stats.put("technicalInterview", repo.countByUserIdAndStatus(userId, "Technical Interview"));
+        stats.put("hrInterview", repo.countByUserIdAndStatus(userId, "HR Interview"));
+        return stats;
+    }
+
+    public List<Job> getAllApplicationsForAdmin() {
+        return repo.findByUserIsNotNull();
+    }
+
+    public Job createForAdmin(Job job, String username) {
+        if (job == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid job payload");
+        }
+
+        // If username is empty => publish for all users
+        if (username == null || username.trim().isEmpty()) {
+            job.setUser(null);
+            return repo.save(job);
+        }
+
+        User user = userRepo.findByUsername(username.trim())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        job.setUser(user);
+        return repo.save(job);
+    }
+
+    public Job updateForAdmin(Long id, Job payload, String username) {
+        Job existing = repo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
+
+        existing.setCompany(payload.getCompany());
+        existing.setRole(payload.getRole());
+        existing.setStatus(payload.getStatus());
+        existing.setAppliedDate(payload.getAppliedDate());
+        existing.setNotes(payload.getNotes());
+
+        // Keep it public
+        existing.setUser(null);
+
+        return repo.save(existing);
+    }
+
+    public void deleteForAdmin(Long id) {
+        delete(id);
+    }
+
+    public Map<String, Object> getAdminStats() {
+        Map<String, Object> stats = new HashMap<>();
+
+        stats.put("totalJobs", repo.count());
+        stats.put("usersApplied", repo.countDistinctUsersWithApplications());
+        stats.put("totalCompanies", repo.countDistinctCompanies());
+        stats.put("usersWithOffers", repo.countDistinctUsersWithOffers());
+
+        Map<String, Long> byStatus = new HashMap<>();
+        for (Object[] row : repo.countByStatusGrouped()) {
+            String status = row[0] == null ? "Unknown" : row[0].toString();
+            Long count = ((Number) row[1]).longValue();
+            byStatus.put(status, count);
+        }
+        stats.put("byStatus", byStatus);
 
         return stats;
+    }
+
+    private boolean isAdmin(String username) {
+        return userRepo.findByUsername(username)
+                .map(u -> u.getRole() != null && "ADMIN".equals(u.getRole().name()))
+                .orElse(false);
+    }
+
+    public List<Job> getPublicJobs() {
+        return repo.findByUserIsNull();
+    }
+
+    public Job applyToPublicJob(Long jobId, String username) {
+        if (jobId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job id is required");
+        }
+
+        User user = userRepo.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        Job publicJob = repo.findById(jobId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
+
+        if (publicJob.getUser() != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This is not a public job");
+        }
+
+        boolean alreadyApplied = repo.existsByUserIdAndCompanyIgnoreCaseAndRoleIgnoreCase(
+                user.getId(),
+                publicJob.getCompany(),
+                publicJob.getRole()
+        );
+
+        if (alreadyApplied) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "You already applied for this job");
+        }
+
+        Job applied = new Job();
+        applied.setCompany(publicJob.getCompany());
+        applied.setRole(publicJob.getRole());
+        applied.setStatus("Online Test");
+        applied.setAppliedDate(java.time.LocalDate.now());
+        applied.setNotes(publicJob.getNotes());
+        applied.setUser(user);
+
+        return repo.save(applied);
     }
 }

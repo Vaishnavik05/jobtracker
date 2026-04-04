@@ -1,31 +1,38 @@
-import api from "../api/client";
+import "./JobList.css";
 
-export default function JobList({ jobs, refresh }) {
-  const handleDelete = async (id) => {
-    await api.delete(`/api/applications/${id}`);
-    refresh?.();
-  };
+export default function JobList({ jobs = [] }) {
+  if (!jobs.length) {
+    return (
+      <div className="joblist-empty">
+        <h3>No applications yet</h3>
+        <p>Apply to new jobs from the View New Jobs section.</p>
+      </div>
+    );
+  }
 
   return (
-    <div style={styles.wrap}>
+    <div className="joblist-wrap">
       {jobs.map((job) => (
-        <div key={job.id} style={styles.card}>
-          <div>
-            <h3>{job.company}</h3>
-            <p><b>Role:</b> {job.role}</p>
-            <p><b>Status:</b> {job.status}</p>
-            <p><b>Date:</b> {job.appliedDate}</p>
-            <p><b>Notes:</b> {job.notes}</p>
+        <article key={job.id} className="job-card">
+          <div className="job-main">
+            <div className="job-title-row">
+              <h3>{job.company || "Company"}</h3>
+              <span className="job-status">{job.status || "Online Test"}</span>
+            </div>
+            <p>
+              <strong>Role:</strong> {job.role || "-"}
+            </p>
+            <p>
+              <strong>Date:</strong> {job.appliedDate || "-"}
+            </p>
+            {job.notes ? (
+              <p>
+                <strong>Notes:</strong> {job.notes}
+              </p>
+            ) : null}
           </div>
-          <button onClick={() => handleDelete(job.id)} style={styles.delete}>Delete</button>
-        </div>
+        </article>
       ))}
     </div>
   );
 }
-
-const styles = {
-  wrap: { display: "grid", gap: 12, marginTop: 20 },
-  card: { background: "#fff", padding: 20, borderRadius: 12, boxShadow: "0 8px 20px rgba(0,0,0,0.06)", display: "flex", justifyContent: "space-between", alignItems: "flex-start" },
-  delete: { padding: "8px 12px", border: "none", background: "crimson", color: "#fff", borderRadius: 8 },
-};

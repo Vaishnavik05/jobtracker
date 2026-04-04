@@ -1,5 +1,6 @@
 package com.example.backend.util;
 
+import com.example.backend.model.Role;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -15,9 +16,10 @@ public class JwtUtil {
     private static final long EXPIRATION_MS = 1000L * 60 * 60; // 1 hour
     private final Key key = Keys.hmacShaKeyFor("mysecretkeymysecretkeymysecretkey".getBytes());
 
-    public String generateToken(String username) {
+    public String generateToken(String username, Role role) {
         return Jwts.builder()
                 .setSubject(username)
+                .claim("role", role.name())
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_MS))
                 .signWith(key, SignatureAlgorithm.HS256)
@@ -26,6 +28,11 @@ public class JwtUtil {
 
     public String extractUsername(String token) {
         return getClaims(token).getSubject();
+    }
+
+    public String extractRole(String token) {
+        Object role = getClaims(token).get("role");
+        return role == null ? "USER" : role.toString();
     }
 
     public boolean isValid(String token) {

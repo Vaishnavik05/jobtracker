@@ -83,4 +83,15 @@ public class JobController {
         String username = auth.getName();
         return ResponseEntity.ok(jobService.getStats(username));
     }
+
+    @GetMapping("/public-jobs")
+    public ResponseEntity<List<Job>> getPublicJobs() {
+        return ResponseEntity.ok(jobService.getPublicJobs());
+    }
+
+    @PostMapping("/apply/{id}")
+    public ResponseEntity<Job> applyToPublicJob(@PathVariable Long id, Authentication auth) {
+        Job created = jobService.applyToPublicJob(id, auth.getName());
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
 }

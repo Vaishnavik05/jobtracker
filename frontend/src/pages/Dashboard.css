@@ -1,0 +1,363 @@
+.db-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(900px 340px at 20% -5%, rgba(56, 189, 248, 0.16), transparent),
+    radial-gradient(820px 280px at 90% -10%, rgba(37, 99, 235, 0.14), transparent),
+    #f3f7fc;
+  padding: 26px 14px;
+}
+
+.db-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+}
+
+.db-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  background: #fff;
+  border: 1px solid #e4ecf4;
+  border-radius: 18px;
+  padding: 16px 18px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.db-top h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.5rem;
+}
+
+.db-top p {
+  margin: 4px 0 0;
+  color: #64748b;
+}
+
+.db-logout {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: #fff;
+  font-weight: 700;
+  background: linear-gradient(135deg, #f43f5e, #e11d48);
+  cursor: pointer;
+}
+
+.db-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.db-stat {
+  border: 1px solid #dbe5f0;
+  border-radius: 14px;
+  padding: 14px;
+  background: linear-gradient(180deg, #fff, #fbfdff);
+}
+
+.db-stat p {
+  margin: 0;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.db-stat h3 {
+  margin: 8px 0 0;
+  color: #0f172a;
+  font-size: 1.7rem;
+}
+
+.db-filter-card,
+.db-section {
+  background: transparent;
+}
+
+.db-filter-card {
+  border: 1px solid #d7e2ef;
+  border-radius: 16px;
+  padding: 18px;
+  background: linear-gradient(145deg, #eef3fb, #e5edf8);
+  box-shadow: 0 10px 26px rgba(20, 40, 90, 0.08);
+}
+
+.db-filter-card h2 {
+  margin: 0 0 12px;
+  color: #1d2a44;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.db-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.db-field label {
+  display: block;
+  margin-bottom: 7px;
+  color: #31486d;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.db-control {
+  width: 100%;
+  border: 1px solid #b9c8de;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, #dfe8f6, #d3def0); /* not white */
+  color: #0f1d35;
+  font-size: 1rem;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 120ms ease;
+  appearance: none;
+}
+
+.db-control::placeholder {
+  color: #5e7193;
+  opacity: 1;
+}
+
+.db-control:hover {
+  border-color: #93abd0;
+}
+
+.db-control:focus {
+  border-color: #5e88d9;
+  box-shadow: 0 0 0 4px rgba(94, 136, 217, 0.2);
+  transform: translateY(-1px);
+}
+
+.db-control option {
+  background: #e8eef9;
+  color: #10213f;
+}
+
+@media (max-width: 900px) {
+  .db-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .db-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .db-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .db-logout {
+    width: 100%;
+  }
+}
+
+/* Hard override for search/filter controls in dashboard */
+.db-filter-card input,
+.db-filter-card select,
+.db-filters input,
+.db-filters select,
+.db-control {
+  background: linear-gradient(180deg, #dfe8f6, #d3def0) !important;
+  color: #0f1d35 !important;
+  border: 1px solid #b9c8de !important;
+  -webkit-text-fill-color: #0f1d35 !important;
+  caret-color: #0f1d35 !important;
+  opacity: 1 !important;
+  color-scheme: light !important;
+}
+
+.db-filter-card input::placeholder,
+.db-filters input::placeholder,
+.db-control::placeholder {
+  color: #5e7193 !important;
+  opacity: 1 !important;
+}
+
+.db-filter-card select option,
+.db-filters select option,
+.db-control option {
+  background: #e8eef9 !important;
+  color: #10213f !important;
+}
+
+.db-filter-card input:focus,
+.db-filter-card select:focus,
+.db-filters input:focus,
+.db-filters select:focus,
+.db-control:focus {
+  border-color: #5e88d9 !important;
+  box-shadow: 0 0 0 4px rgba(94, 136, 217, 0.2) !important;
+  outline: none !important;
+}
+
+/* Force light, visible controls inside dashboard filters */
+.db-filter-card .db-control,
+.db-filter-card input,
+.db-filter-card select,
+.db-filters input,
+.db-filters select,
+input.db-control,
+select.db-control {
+  background: linear-gradient(180deg, #dfe8f6, #d3def0) !important;
+  color: #0f1d35 !important;
+  -webkit-text-fill-color: #0f1d35 !important;
+  border: 1px solid #b9c8de !important;
+  border-radius: 12px !important;
+  opacity: 1 !important;
+  color-scheme: light !important;
+  caret-color: #0f1d35 !important;
+}
+
+.db-filter-card .db-control::placeholder,
+.db-filter-card input::placeholder,
+.db-filters input::placeholder {
+  color: #5e7193 !important;
+  opacity: 1 !important;
+}
+
+.db-filter-card .db-control:focus,
+.db-filter-card input:focus,
+.db-filter-card select:focus,
+.db-filters input:focus,
+.db-filters select:focus {
+  border-color: #5e88d9 !important;
+  box-shadow: 0 0 0 4px rgba(94, 136, 217, 0.22) !important;
+  outline: none !important;
+}
+
+.db-filter-card select option,
+.db-filters select option,
+select.db-control option {
+  background: #e8eef9 !important;
+  color: #10213f !important;
+}
+
+/* Absolute override: detach from DaisyUI dark input styles */
+.db-filter-card .db-control {
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  height: 56px;
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 1px solid #9cb3d3;
+  background: linear-gradient(180deg, #d8e4f6 0%, #cfdcf1 100%);
+  color: #10213f;
+  font-size: 1.05rem;
+  line-height: 1;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.db-filter-card .db-control::placeholder {
+  color: #5b6f90;
+  opacity: 1;
+}
+
+.db-filter-card .db-control:focus {
+  border-color: #4f7fd8;
+  box-shadow: 0 0 0 4px rgba(79, 127, 216, 0.22);
+}
+
+/* select specific */
+.db-filter-card select.db-control {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 42px;
+  background-image:
+    linear-gradient(180deg, #d8e4f6 0%, #cfdcf1 100%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23263f68' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat, no-repeat;
+  background-position: center, right 14px center;
+  background-size: auto, 14px;
+}
+
+.db-filter-card select.db-control option {
+  background: #e8effa;
+  color: #10213f;
+}
+
+.db-public-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.db-public-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.db-public-card h3 {
+  margin: 0 0 6px;
+  color: #0f172a;
+}
+
+.db-public-card p {
+  margin: 4px 0;
+  color: #475569;
+}
+
+.db-public-notes {
+  margin-top: 8px;
+  white-space: pre-wrap;
+}
+
+.db-apply-btn {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.db-apply-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.db-notice {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.db-notice-error {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #9f1239;
+}
+
+.db-notice-success {
+  background: #ecfdf3;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+
+.db-empty {
+  padding: 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+}
