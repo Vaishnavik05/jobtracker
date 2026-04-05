@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 
 @RequiredArgsConstructor
 @Service
@@ -150,16 +151,18 @@ public class JobService {
             String company = job.getCompany() == null ? "" : job.getCompany().trim();
             String role = job.getRole() == null ? "" : job.getRole().trim();
             String location = job.getLocation() == null ? "" : job.getLocation().trim();
+            LocalDate postedDate = job.getAppliedDate();
 
-            if (repo.existsPublicDuplicate(company, role, location)) {
+            if (postedDate == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Posted date is required");
+            }
+
+            if (repo.existsPublicDuplicate(company, role, location, postedDate)) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Duplicate public job already exists");
             }
 
-            if (job.getAppliedDate() == null) {
-                // For public jobs, appliedDate acts as posted date
-                job.setAppliedDate(java.time.LocalDate.now());
-            }
             job.setUser(null);
+            job.setAppliedDate(postedDate);
             return repo.save(job);
         }
 
@@ -242,6 +245,17 @@ public class JobService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This is not a public job");
         }
 
+        // Apply window is based on admin-entered appliedDate (used as posted date)
+        LocalDate postedDate = publicJob.getAppliedDate();
+        if (postedDate == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This job is inactive (missing posted date)");
+        }
+
+        long daysSincePosted = ChronoUnit.DAYS.between(postedDate, LocalDate.now());
+        if (daysSincePosted >= 1) {
+            throw new ResponseStatusException(HttpStatus.GONE, "This job is inactive. Apply window closed");
+        }
+
         boolean alreadyApplied = repo.existsByUserIdAndCompanyIgnoreCaseAndRoleIgnoreCase(
                 user.getId(),
                 publicJob.getCompany(),
@@ -256,7 +270,7 @@ public class JobService {
         applied.setCompany(publicJob.getCompany());
         applied.setRole(publicJob.getRole());
         applied.setStatus("Online Test");
-        applied.setAppliedDate(java.time.LocalDate.now());
+        applied.setAppliedDate(publicJob.getAppliedDate());
         applied.setLocation(publicJob.getLocation());
         applied.setNotes(publicJob.getNotes());
         applied.setUser(user);

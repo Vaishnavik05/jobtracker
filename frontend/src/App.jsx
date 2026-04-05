@@ -225,13 +225,20 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
   }, [token]);
 
   const stats = useMemo(() => {
-    const total = applications.length;
-    const applied = applications.filter((application) => STATUS_OPTIONS.includes(application.status)).length;
-    const notApplied = total - applied;
+    // Total jobs should be all admin-posted jobs visible to user
+    const total = publicJobs.length;
+
+    // Applied jobs = jobs user already applied
+    const applied = applications.length;
+
+    // Not applied = remaining public jobs
+    const notApplied = Math.max(total - applied, 0);
+
     const offers = applications.filter((application) => application.status === "HR Interview").length;
     const rejected = applications.filter((application) => application.status === "Rejected").length;
+
     return { total, applied, notApplied, offers, rejected };
-  }, [applications]);
+  }, [applications, publicJobs]);
 
   const chartData = useMemo(() => {
     const counts = STATUS_OPTIONS.reduce((accumulator, status) => {
@@ -340,6 +347,18 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
     } finally {
       setApplyingId(null);
     }
+  };
+
+  const isApplyWindowOpen = (dateValue) => {
+    if (!dateValue) return false;
+    const posted = new Date(dateValue + "T00:00:00");
+    if (Number.isNaN(posted.getTime())) return false;
+
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    const diff = Date.now() - posted.getTime();
+
+    // open only during first 24 hours from admin posted date
+    return diff >= 0 && diff < ONE_DAY_MS;
   };
 
   return (
@@ -568,6 +587,10 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
                     );
                   });
 
+                  const windowOpen = isApplyWindowOpen(job?.appliedDate);
+                  const isBusy = applyingId === job.id;
+                  const disableApply = isBusy || isApplied || !windowOpen;
+
                   return (
                     <div
                       key={job.id}
@@ -590,7 +613,7 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
 
                         {job.notes ? <p className="text-sm text-gray-600 mt-2">{job.notes}</p> : null}
 
-                        <p
+                        {/* <p
                           className={
                             "text-sm font-semibold mt-2 inline-flex items-center rounded-full px-2.5 py-1 " +
                             (isApplied
@@ -599,20 +622,22 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
                           }
                         >
                           {isApplied ? "Applied" : "Not Applied"}
-                        </p>
+                        </p> */}
                       </div>
 
                       <button
                         onClick={() => handleApplyToPublicJob(job.id)}
-                        disabled={applyingId === job.id || isApplied}
+                        disabled={disableApply}
                         className={
                           "px-4 py-2 rounded-lg disabled:opacity-60 " +
                           (isApplied
                             ? "bg-green-600 text-white cursor-not-allowed"
+                            : !windowOpen
+                            ? "bg-slate-400 text-white cursor-not-allowed"
                             : "bg-blue-600 text-white hover:bg-blue-700")
                         }
                       >
-                        {isApplied ? "Applied" : applyingId === job.id ? "Applying..." : "Apply"}
+                        {isApplied ? "Applied" : !windowOpen ? "Inactive" : isBusy ? "Applying..." : "Apply"}
                       </button>
                     </div>
                   );

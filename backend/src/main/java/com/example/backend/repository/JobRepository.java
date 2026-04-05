@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.time.LocalDate;
 
 @Repository
 public interface JobRepository extends JpaRepository<Job, Long> {
@@ -64,14 +65,20 @@ public interface JobRepository extends JpaRepository<Job, Long> {
                                   @Param("location") String location);
 
     @Query("""
-        select count(distinct concat(
-            lower(trim(coalesce(j.company, ''))), '|',
-            lower(trim(coalesce(j.role, ''))), '|',
-            lower(trim(coalesce(j.location, '')))
-        ))
-        from Job j
+        select (count(j) > 0) from Job j
         where j.user is null
-""")
+          and lower(j.company) = lower(:company)
+          and lower(j.role) = lower(:role)
+          and lower(coalesce(j.location, '')) = lower(coalesce(:location, ''))
+          and j.appliedDate = :appliedDate
+    """)
+    boolean existsPublicDuplicate(@Param("company") String company,
+                                  @Param("role") String role,
+                                  @Param("location") String location,
+                                  @Param("appliedDate") LocalDate appliedDate);
+
+    @Query("select count(j) from Job j where j.user is null")
     long countDistinctJobPostings();
+
 }
 

@@ -49,27 +49,87 @@
 
 .db-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 
 .db-stat {
-  border: 1px solid #dbe5f0;
-  border-radius: 14px;
-  padding: 14px;
-  background: linear-gradient(180deg, #fff, #fbfdff);
+  border: 0;
+  border-radius: 18px;
+  padding: 16px;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    transform 200ms ease,
+    box-shadow 200ms ease,
+    filter 200ms ease;
+  box-shadow: none;
+}
+
+.db-stat::after {
+  content: "";
+  position: absolute;
+  width: 160px;
+  height: 160px;
+  right: -40px;
+  bottom: -70px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  pointer-events: none;
 }
 
 .db-stat p {
   margin: 0;
-  color: #64748b;
-  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.72rem;
+  opacity: 0.95;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .db-stat h3 {
-  margin: 8px 0 0;
-  color: #0f172a;
-  font-size: 1.7rem;
+  margin: 8px 0 6px;
+  color: #fff;
+  font-size: clamp(1.7rem, 2.2vw, 2.2rem);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.db-stat:nth-child(1) {
+  background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+}
+
+.db-stat:nth-child(2) {
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+}
+
+.db-stat:nth-child(3) {
+  background: linear-gradient(135deg, #7c3aed, #a78bfa);
+}
+
+.db-stat:nth-child(4) {
+  background: linear-gradient(135deg, #b45309, #f59e0b);
+}
+
+.db-stat:nth-child(5) {
+  background: linear-gradient(135deg, #be123c, #f43f5e);
+}
+
+.db-stat:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.03);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.15);
+}
+
+.db-stat-active {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+  outline: 2px solid rgba(255, 255, 255, 0.28);
+  outline-offset: 2px;
 }
 
 .db-filter-card,
@@ -144,7 +204,7 @@
 
 @media (max-width: 900px) {
   .db-stats {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .db-filters {
@@ -360,4 +420,16 @@ select.db-control option {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   color: #475569;
+}
+
+@media (max-width: 1020px) {
+  .db-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .db-stats {
+    grid-template-columns: 1fr;
+  }
 }

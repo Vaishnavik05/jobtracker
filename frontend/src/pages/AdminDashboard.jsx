@@ -281,7 +281,7 @@ export default function AdminDashboard() {
 
         <section className="ad-panel">
           <div className="ad-panel-head">
-            <h3>{editingId ? "Edit Application" : "Add Job Application"}</h3>
+            <h3>{editingId ? "Edit Application" : "Add Job Posting"}</h3>
             {editingId ? (
               <button className="ad-btn ad-btn-muted" onClick={resetForm} type="button">
                 Cancel Edit

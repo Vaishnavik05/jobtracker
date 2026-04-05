@@ -15,7 +15,8 @@ export default function Dashboard() {
   const { logout } = useAuth();
 
   const [stats, setStats] = useState({});
-  const [jobs, setJobs] = useState([]);
+  const [jobs, setJobs] = useState([]);      // filtered jobs (for All view)
+  const [allJobs, setAllJobs] = useState([]); // all user-applied jobs
   const [filters, setFilters] = useState({ status: "", company: "" });
 
   const [publicJobs, setPublicJobs] = useState([]);
@@ -28,12 +29,22 @@ export default function Dashboard() {
 
   const loadUserJobs = useCallback(async () => {
     try {
-      const params = {};
-      if (filters.status) params.status = filters.status;
-      if (filters.company) params.company = filters.company;
+      // always fetch full applied list
+      const res = await api.get("/api/applications");
+      const all = Array.isArray(res.data) ? res.data : [];
+      setAllJobs(all);
 
-      const res = await api.get("/api/applications", { params });
-      setJobs(Array.isArray(res.data) ? res.data : []);
+      // derive filtered list only for "all" display
+      const filtered = all.filter((job) => {
+        if (filters.status && normalize(job?.status) !== normalize(filters.status)) return false;
+        if (filters.company) {
+          const company = (job?.company ?? "").toString().toLowerCase();
+          if (!company.includes(filters.company.toLowerCase())) return false;
+        }
+        return true;
+      });
+
+      setJobs(filtered);
     } catch (e) {
       setError("Unable to load your applications.");
     }
@@ -106,6 +117,18 @@ export default function Dashboard() {
     }
   };
 
+  const handleViewAppliedJobs = () => {
+    setView("applied");
+
+    // wait for state update, then jump to the applied list section
+    requestAnimationFrame(() => {
+      const section = document.getElementById("jobs-list-section");
+      if (section) {
+        section.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+  };
+
   const stageStats = useMemo(() => {
     return jobs.reduce(
       (acc, job) => {
@@ -120,7 +143,7 @@ export default function Dashboard() {
     );
   }, [jobs]);
 
-  const totalJobs = stats.totalJobs ?? stats.total ?? jobs.length ?? 0;
+  const totalJobs = publicJobs.length;
   const offers = stats.offers ?? stats.hrInterview ?? stageStats.hrInterview ?? 0;
   const rejected = stats.rejected ?? 0;
 
@@ -135,14 +158,15 @@ export default function Dashboard() {
   const isNotAppliedWindowOver = (dateValue) => {
     if (!dateValue) return true;
 
-    const parsed = new Date(`${dateValue}T00:00:00`);
+    const parsed = new Date(dateValue + "T00:00:00");
     if (Number.isNaN(parsed.getTime())) return true;
 
     const ONE_DAY_MS = 24 * 60 * 60 * 1000;
     return Date.now() - parsed.getTime() >= ONE_DAY_MS;
   };
 
-  const appliedJobs = useMemo(() => jobs, [jobs]);
+  // IMPORTANT: Applied should come from full list, not filtered jobs
+  const appliedJobs = useMemo(() => allJobs, [allJobs]);
 
   const notAppliedJobs = useMemo(() => {
     const appliedSet = new Set(appliedJobs.map(jobKey));
@@ -153,25 +177,38 @@ export default function Dashboard() {
 
   const offerJobs = useMemo(
     () =>
-      jobs.filter((job) => {
+      allJobs.filter((job) => {
         const status = normalize(job?.status);
         return status === "offer" || status === "hr interview";
       }),
-    [jobs]
+    [allJobs]
   );
 
   const rejectedJobs = useMemo(
-    () => jobs.filter((job) => normalize(job?.status) === "rejected"),
-    [jobs]
+    () => allJobs.filter((job) => normalize(job?.status) === "rejected"),
+    [allJobs]
+  );
+
+  const applyCurrentFilters = useCallback(
+    (list) =>
+      list.filter((job) => {
+        if (filters.status && normalize(job?.status) !== normalize(filters.status)) return false;
+        if (filters.company) {
+          const company = (job?.company ?? "").toString().toLowerCase();
+          if (!company.includes(filters.company.toLowerCase())) return false;
+        }
+        return true;
+      }),
+    [filters]
   );
 
   const visibleJobs = useMemo(() => {
-    if (view === "applied") return appliedJobs;
+    if (view === "applied") return applyCurrentFilters(appliedJobs);
     if (view === "notApplied") return notAppliedJobs;
-    if (view === "offers") return offerJobs;
-    if (view === "rejected") return rejectedJobs;
-    return jobs;
-  }, [view, jobs, appliedJobs, notAppliedJobs, offerJobs, rejectedJobs]);
+    if (view === "offers") return applyCurrentFilters(offerJobs);
+    if (view === "rejected") return applyCurrentFilters(rejectedJobs);
+    return jobs; // already filtered
+  }, [view, jobs, appliedJobs, notAppliedJobs, offerJobs, rejectedJobs, applyCurrentFilters]);
 
   return (
     <div className="db-page">
@@ -195,7 +232,7 @@ export default function Dashboard() {
             title="Applied Jobs"
             value={appliedJobs.length}
             active={view === "applied"}
-            onClick={() => setView("applied")}
+            onClick={handleViewAppliedJobs}
           />
           <StatCard
             title="Not Applied"
