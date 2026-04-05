@@ -27,6 +27,7 @@ public class AdminApplicationController {
             String role,
             String status,
             String appliedDate,
+            String location,
             String notes
     ) {}
 
@@ -37,6 +38,7 @@ public class AdminApplicationController {
             String role,
             String status,
             LocalDate appliedDate,
+            String location,
             String notes
     ) {}
 
@@ -44,7 +46,7 @@ public class AdminApplicationController {
         if (value == null || value.isBlank()) return null;
 
         try {
-            return LocalDate.parse(value); // yyyy-MM-dd
+            return LocalDate.parse(value);
         } catch (Exception ignored) {
         }
 
@@ -53,7 +55,7 @@ public class AdminApplicationController {
         } catch (Exception ignored) {
         }
 
-        return null; // never fail save because of date format
+        return null;
     }
 
     private String safe(String value) {
@@ -71,6 +73,7 @@ public class AdminApplicationController {
                         job.getRole(),
                         job.getStatus(),
                         job.getAppliedDate(),
+                        job.getLocation(),
                         job.getNotes()
                 ))
                 .toList();
@@ -86,7 +89,7 @@ public class AdminApplicationController {
     public ResponseEntity<AdminApplicationResponse> create(@RequestBody AdminApplicationRequest request) {
         String company = safe(request.company());
         String role = safe(request.role());
-        String status = safe(request.status());
+        String location = safe(request.location());
 
         if (company.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Company is required");
@@ -94,18 +97,15 @@ public class AdminApplicationController {
         if (role.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role is required");
         }
-        if (status.isEmpty()) {
-            status = "Online Test";
-        }
 
         Job job = new Job();
         job.setCompany(company);
         job.setRole(role);
-        job.setStatus(status);
+        job.setStatus(null);
         job.setAppliedDate(parseDateFlexible(request.appliedDate()));
+        job.setLocation(location);
         job.setNotes(request.notes());
 
-        // always public job for user-side visibility
         Job saved = jobService.createForAdmin(job, "");
 
         return ResponseEntity.ok(new AdminApplicationResponse(
@@ -115,6 +115,7 @@ public class AdminApplicationController {
                 saved.getRole(),
                 saved.getStatus(),
                 saved.getAppliedDate(),
+                saved.getLocation(),
                 saved.getNotes()
         ));
     }
@@ -127,6 +128,7 @@ public class AdminApplicationController {
         String company = safe(request.company());
         String role = safe(request.role());
         String status = safe(request.status());
+        String location = safe(request.location());
 
         if (company.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Company is required");
@@ -135,7 +137,7 @@ public class AdminApplicationController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role is required");
         }
         if (status.isEmpty()) {
-            status = "Online Test";
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status is required while editing");
         }
 
         Job payload = new Job();
@@ -143,6 +145,7 @@ public class AdminApplicationController {
         payload.setRole(role);
         payload.setStatus(status);
         payload.setAppliedDate(parseDateFlexible(request.appliedDate()));
+        payload.setLocation(location);
         payload.setNotes(request.notes());
 
         Job updated = jobService.updateForAdmin(id, payload, "");
@@ -154,6 +157,7 @@ public class AdminApplicationController {
                 updated.getRole(),
                 updated.getStatus(),
                 updated.getAppliedDate(),
+                updated.getLocation(),
                 updated.getNotes()
         ));
     }

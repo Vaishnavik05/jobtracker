@@ -1,8 +1,10 @@
 package com.example.backend.repository;
 
 import com.example.backend.model.Job;
+import com.example.backend.model.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -21,10 +23,8 @@ public interface JobRepository extends JpaRepository<Job, Long> {
 
     long countByUserIdAndStatus(Long userId, String status);
 
-    // Public jobs created by admin (not assigned to a specific user yet)
     List<Job> findByUserIsNull();
 
-    // Prevent duplicate apply by same user for same company+role public post
     boolean existsByUserIdAndCompanyIgnoreCaseAndRoleIgnoreCase(Long userId, String company, String role);
 
     @Query("select count(distinct j.user.id) from Job j where j.user is not null")
@@ -36,8 +36,42 @@ public interface JobRepository extends JpaRepository<Job, Long> {
     @Query("select count(distinct j.user.id) from Job j where j.user is not null and (j.status = 'HR Interview' or j.status = 'Offer')")
     long countDistinctUsersWithOffers();
 
-    @Query("select j.status, count(j) from Job j group by j.status")
+    @Query("select j.status, count(j) from Job j where j.user is not null and j.status is not null group by j.status")
     List<Object[]> countByStatusGrouped();
 
     List<Job> findByUserIsNotNull();
+
+    @Query("""
+        select j
+        from Job j
+        left join j.user u
+        where u is null
+           or u.role = :role
+           or lower(coalesce(u.username, '')) = 'admin'
+        order by j.id desc
+    """)
+    List<Job> findPublicJobs(@Param("role") Role role);
+
+    @Query("""
+        select (count(j) > 0) from Job j
+        where j.user is null
+          and lower(j.company) = lower(:company)
+          and lower(j.role) = lower(:role)
+          and lower(coalesce(j.location, '')) = lower(coalesce(:location, ''))
+    """)
+    boolean existsPublicDuplicate(@Param("company") String company,
+                                  @Param("role") String role,
+                                  @Param("location") String location);
+
+    @Query("""
+        select count(distinct concat(
+            lower(trim(coalesce(j.company, ''))), '|',
+            lower(trim(coalesce(j.role, ''))), '|',
+            lower(trim(coalesce(j.location, '')))
+        ))
+        from Job j
+        where j.user is null
+""")
+    long countDistinctJobPostings();
 }
+

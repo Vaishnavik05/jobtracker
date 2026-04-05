@@ -1,6 +1,7 @@
 package com.example.backend.service;
 
 import com.example.backend.model.Job;
+import com.example.backend.model.Role;
 import com.example.backend.model.User;
 import com.example.backend.repository.JobRepository;
 import com.example.backend.repository.UserRepository;
@@ -13,6 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.time.LocalDate;
 
 @RequiredArgsConstructor
 @Service
@@ -34,6 +36,7 @@ public class JobService {
         if (job != null && user != null) {
             job.setId(null);
             job.setUser(user);
+            job.setStatus("Online Test"); // force default on create
             return repo.save(job);
         }
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid job or user");
@@ -143,8 +146,19 @@ public class JobService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid job payload");
         }
 
-        // If username is empty => publish for all users
         if (username == null || username.trim().isEmpty()) {
+            String company = job.getCompany() == null ? "" : job.getCompany().trim();
+            String role = job.getRole() == null ? "" : job.getRole().trim();
+            String location = job.getLocation() == null ? "" : job.getLocation().trim();
+
+            if (repo.existsPublicDuplicate(company, role, location)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Duplicate public job already exists");
+            }
+
+            if (job.getAppliedDate() == null) {
+                // For public jobs, appliedDate acts as posted date
+                job.setAppliedDate(java.time.LocalDate.now());
+            }
             job.setUser(null);
             return repo.save(job);
         }
@@ -166,16 +180,14 @@ public class JobService {
         Job existing = repo.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
 
-        // Keep existing value if incoming field is null
         existing.setCompany(payload.getCompany() != null ? payload.getCompany() : existing.getCompany());
         existing.setRole(payload.getRole() != null ? payload.getRole() : existing.getRole());
         existing.setStatus(payload.getStatus() != null ? payload.getStatus() : existing.getStatus());
         existing.setAppliedDate(payload.getAppliedDate() != null ? payload.getAppliedDate() : existing.getAppliedDate());
+        existing.setLocation(payload.getLocation() != null ? payload.getLocation() : existing.getLocation());
         existing.setNotes(payload.getNotes() != null ? payload.getNotes() : existing.getNotes());
 
-        // Admin updates should remain public postings
-        existing.setUser(null);
-
+        // IMPORTANT: keep existing user relation (do NOT force null)
         return repo.save(existing);
     }
 
@@ -186,7 +198,7 @@ public class JobService {
     public Map<String, Object> getAdminStats() {
         Map<String, Object> stats = new HashMap<>();
 
-        stats.put("totalJobs", repo.count());
+        stats.put("totalJobs", repo.countDistinctJobPostings());
         stats.put("usersApplied", repo.countDistinctUsersWithApplications());
         stats.put("totalCompanies", repo.countDistinctCompanies());
         stats.put("usersWithOffers", repo.countDistinctUsersWithOffers());
@@ -209,7 +221,7 @@ public class JobService {
     }
 
     public List<Job> getPublicJobs() {
-        return repo.findByUserIsNull();
+        return repo.findPublicJobs(Role.ADMIN);
     }
 
     public Job applyToPublicJob(Long jobId, String username) {
@@ -223,7 +235,10 @@ public class JobService {
         Job publicJob = repo.findById(jobId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
 
-        if (publicJob.getUser() != null) {
+        boolean isPublic = publicJob.getUser() == null
+                || publicJob.getUser().getRole() == Role.ADMIN;
+
+        if (!isPublic) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This is not a public job");
         }
 
@@ -242,9 +257,14 @@ public class JobService {
         applied.setRole(publicJob.getRole());
         applied.setStatus("Online Test");
         applied.setAppliedDate(java.time.LocalDate.now());
+        applied.setLocation(publicJob.getLocation());
         applied.setNotes(publicJob.getNotes());
         applied.setUser(user);
 
         return repo.save(applied);
+    }
+
+    public List<Job> getPublicJobs(String username) {
+        return getPublicJobs();
     }
 }

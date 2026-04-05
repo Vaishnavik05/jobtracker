@@ -17,6 +17,7 @@ public class Job {
     private String role;
     private String status;
     private LocalDate appliedDate;
+    private String location;
 
     @Lob
     @Column(columnDefinition = "LONGTEXT")

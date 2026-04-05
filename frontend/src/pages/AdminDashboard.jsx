@@ -8,6 +8,7 @@ const EMPTY_FORM = {
   role: "",
   status: "Online Test",
   appliedDate: "",
+  location: "",
   notes: "",
 };
 
@@ -125,6 +126,7 @@ export default function AdminDashboard() {
       role: row.role || "",
       status: row.status || "Online Test",
       appliedDate: row.appliedDate || "",
+      location: row.location || "",
       notes: row.notes || "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -147,9 +149,10 @@ export default function AdminDashboard() {
     const payload = {
       company: (form.company || "").trim(),
       role: (form.role || "").trim(),
-      status: (form.status || "Online Test").trim(),
       appliedDate: form.appliedDate ? form.appliedDate : null,
+      location: (form.location || "").trim(),
       notes: (form.notes || "").trim(),
+      ...(editingId ? { status: (form.status || "").trim() } : {}),
     };
 
     setSaving(true);
@@ -307,16 +310,20 @@ export default function AdminDashboard() {
                 required
               />
             </label>
-            <label>
-              Status
-              <select name="status" value={form.status} onChange={onChange}>
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </label>
+
+            {editingId ? (
+              <label>
+                Status
+                <select name="status" value={form.status} onChange={onChange} required>
+                  {STATUS_OPTIONS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
             <label>
               Applied Date
               <input
@@ -326,6 +333,17 @@ export default function AdminDashboard() {
                 onChange={onChange}
               />
             </label>
+
+            <label>
+              Location
+              <input
+                name="location"
+                value={form.location}
+                onChange={onChange}
+                placeholder="e.g. Chennai / Remote / Hybrid"
+              />
+            </label>
+
             <label className="ad-col-span-2">
               Notes
               <textarea
@@ -347,7 +365,7 @@ export default function AdminDashboard() {
 
         <section className="ad-panel">
           <div className="ad-panel-head">
-            <h3>All Applications</h3>
+            <h3>Users Job Applications</h3>
             <input
               className="ad-search"
               placeholder="Search applications by user, company, role, status..."

@@ -20,6 +20,7 @@ export default function Dashboard() {
 
   const [publicJobs, setPublicJobs] = useState([]);
   const [applyingId, setApplyingId] = useState(null);
+  const [loadingPublicJobs, setLoadingPublicJobs] = useState(false);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -48,12 +49,15 @@ export default function Dashboard() {
   }, []);
 
   const loadPublicJobs = useCallback(async () => {
+    setLoadingPublicJobs(true);
     try {
       const res = await api.get("/api/applications/public-jobs");
       setPublicJobs(Array.isArray(res.data) ? res.data : []);
       setPublicError("");
     } catch (e) {
       setPublicError("Admin posted jobs could not be loaded right now.");
+    } finally {
+      setLoadingPublicJobs(false);
     }
   }, []);
 
@@ -91,7 +95,11 @@ export default function Dashboard() {
     }
   };
 
-  const handleViewNewJobs = () => {
+  const handleViewNewJobs = async () => {
+    if (loadingPublicJobs) return;
+
+    await loadPublicJobs();
+
     const section = document.getElementById("public-jobs-section");
     if (section) {
       section.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -116,6 +124,55 @@ export default function Dashboard() {
   const offers = stats.offers ?? stats.hrInterview ?? stageStats.hrInterview ?? 0;
   const rejected = stats.rejected ?? 0;
 
+  const [view, setView] = useState("all");
+
+  const normalize = (value) => (value ?? "").toString().trim().toLowerCase();
+
+  const jobKey = (job) =>
+    [normalize(job?.company), normalize(job?.role), normalize(job?.location)].join("|");
+
+  // If a job has no valid date, treat it as eligible for Not Applied immediately.
+  const isNotAppliedWindowOver = (dateValue) => {
+    if (!dateValue) return true;
+
+    const parsed = new Date(`${dateValue}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return true;
+
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    return Date.now() - parsed.getTime() >= ONE_DAY_MS;
+  };
+
+  const appliedJobs = useMemo(() => jobs, [jobs]);
+
+  const notAppliedJobs = useMemo(() => {
+    const appliedSet = new Set(appliedJobs.map(jobKey));
+    return publicJobs.filter(
+      (job) => !appliedSet.has(jobKey(job)) && isNotAppliedWindowOver(job?.appliedDate)
+    );
+  }, [appliedJobs, publicJobs]);
+
+  const offerJobs = useMemo(
+    () =>
+      jobs.filter((job) => {
+        const status = normalize(job?.status);
+        return status === "offer" || status === "hr interview";
+      }),
+    [jobs]
+  );
+
+  const rejectedJobs = useMemo(
+    () => jobs.filter((job) => normalize(job?.status) === "rejected"),
+    [jobs]
+  );
+
+  const visibleJobs = useMemo(() => {
+    if (view === "applied") return appliedJobs;
+    if (view === "notApplied") return notAppliedJobs;
+    if (view === "offers") return offerJobs;
+    if (view === "rejected") return rejectedJobs;
+    return jobs;
+  }, [view, jobs, appliedJobs, notAppliedJobs, offerJobs, rejectedJobs]);
+
   return (
     <div className="db-page">
       <div className="db-shell">
@@ -128,10 +185,36 @@ export default function Dashboard() {
         </div>
 
         <div className="db-stats">
-          <StatCard title="Total Jobs" value={totalJobs} />
-          <StatCard title="Offers / HR Stage" value={offers} />
-          <StatCard title="Rejected" value={rejected} />
-          <StatCard title="Public Openings" value={publicJobs.length} />
+          <StatCard
+            title="Total Jobs"
+            value={totalJobs}
+            active={view === "all"}
+            onClick={() => setView("all")}
+          />
+          <StatCard
+            title="Applied Jobs"
+            value={appliedJobs.length}
+            active={view === "applied"}
+            onClick={() => setView("applied")}
+          />
+          <StatCard
+            title="Not Applied"
+            value={notAppliedJobs.length}
+            active={view === "notApplied"}
+            onClick={() => setView("notApplied")}
+          />
+          <StatCard
+            title="Offers"
+            value={offerJobs.length}
+            active={view === "offers"}
+            onClick={() => setView("offers")}
+          />
+          <StatCard
+            title="Rejected"
+            value={rejectedJobs.length}
+            active={view === "rejected"}
+            onClick={() => setView("rejected")}
+          />
         </div>
 
         {error ? (
@@ -150,6 +233,7 @@ export default function Dashboard() {
                 className="db-control"
                 value={filters.status}
                 onChange={(e) =>
+                  
                   setFilters((p) => ({ ...p, status: e.target.value }))
                 }
               >
@@ -177,10 +261,10 @@ export default function Dashboard() {
           </div>
         </section>
 
-        <section className="db-section">
+        {/* <section className="db-section">
           <h2>Your Applications</h2>
           <JobList jobs={jobs} refresh={loadData} />
-        </section>
+        </section> */}
 
         <section className="db-section" id="public-jobs-section">
           <h2>Admin Posted Jobs You Can Apply To</h2>
@@ -194,37 +278,84 @@ export default function Dashboard() {
             <div className="db-empty">No public jobs available right now.</div>
           ) : (
             <div className="db-public-grid">
-              {publicJobs.map((job) => (
-                <article key={job.id} className="db-public-card">
-                  <h3>{job.company || "Company"}</h3>
-                  <p>{job.role || "Role"}</p>
-                  <p>
-                    Stage:{" "}
-                    <strong style={{ color: CHART_COLORS[job.status] || "#334155" }}>
-                      {job.status || "Online Test"}
-                    </strong>
-                  </p>
-                  {job.notes ? <p className="db-public-notes">{job.notes}</p> : null}
+              {publicJobs.map((job) => {
+                const alreadyApplied = appliedJobs.some((a) => jobKey(a) === jobKey(job));
+                const windowOver = isNotAppliedWindowOver(job?.appliedDate);
+                const cannotApply = applyingId === job.id || alreadyApplied || windowOver;
 
-                  <button
-                    className="db-apply-btn"
-                    onClick={() => handleApply(job.id)}
-                    disabled={applyingId === job.id}
-                  >
-                    {applyingId === job.id ? "Applying..." : "Apply"}
-                  </button>
-                </article>
-              ))}
+                return (
+                  <article key={job.id} className="db-public-card">
+                    <h3>{job.company || "Company"}</h3>
+                    <p>{job.role || "Role"}</p>
+                    <p>
+                      Stage:{" "}
+                      <strong style={{ color: CHART_COLORS[job.status] || "#334155" }}>
+                        {job.status || "Online Test"}
+                      </strong>
+                    </p>
+
+                    <p>
+                      Posted: <strong>{job.appliedDate || "-"}</strong>
+                    </p>
+                    <p>
+                      Window:{" "}
+                      <strong style={{ color: windowOver ? "#b45309" : "#166534" }}>
+                        {windowOver ? "Expired (Not Applied)" : "Open (1 day)"}
+                      </strong>
+                    </p>
+
+                    {job.notes ? <p className="db-public-notes">{job.notes}</p> : null}
+
+                    <button
+                      className="db-apply-btn"
+                      onClick={() => handleApply(job.id)}
+                      disabled={cannotApply}
+                    >
+                      {alreadyApplied
+                        ? "Applied"
+                        : windowOver
+                        ? "Expired"
+                        : applyingId === job.id
+                        ? "Applying..."
+                        : "Apply"}
+                    </button>
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
 
         <section className="db-section">
+          <h2>
+            {view === "all"
+              ? "All Jobs"
+              : view === "applied"
+              ? "Applied Jobs"
+              : view === "notApplied"
+              ? "Not Applied Jobs"
+              : view === "offers"
+              ? "Offers"
+              : "Rejected Jobs"}
+          </h2>
+          <JobList jobs={visibleJobs} refresh={loadData} />
+        </section>
+
+        <section className="db-section">
           <div className="db-panel-head">
             <div>
-              <h2>View New Jobs</h2>
+              <h2>View All Jobs</h2>
               <p>These are the jobs posted by admin. Apply directly from here.</p>
             </div>
+
+            <button
+              type="button"
+              className="db-apply-btn"
+              onClick={handleViewNewJobs}
+              disabled={loadingPublicJobs}
+            >
+              {loadingPublicJobs ? "Refreshing..." : "Refresh"}
+            </button>
           </div>
 
           {publicError ? (
@@ -245,14 +376,31 @@ export default function Dashboard() {
                       {job.status || "Online Test"}
                     </strong>
                   </p>
+
+                  <p>
+                    Posted: <strong>{job.appliedDate || "-"}</strong>
+                  </p>
+                  <p>
+                    Window:{" "}
+                    <strong style={{ color: windowOver ? "#b45309" : "#166534" }}>
+                      {windowOver ? "Expired (Not Applied)" : "Open (1 day)"}
+                    </strong>
+                  </p>
+
                   {job.notes ? <p className="db-public-notes">{job.notes}</p> : null}
 
                   <button
                     className="db-apply-btn"
                     onClick={() => handleApply(job.id)}
-                    disabled={applyingId === job.id}
+                    disabled={cannotApply}
                   >
-                    {applyingId === job.id ? "Applying..." : "Apply"}
+                    {alreadyApplied
+                      ? "Applied"
+                      : windowOver
+                      ? "Expired"
+                      : applyingId === job.id
+                      ? "Applying..."
+                      : "Apply"}
                   </button>
                 </article>
               ))}
@@ -264,11 +412,15 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ title, value }) {
+function StatCard({ title, value, active = false, onClick }) {
   return (
-    <div className="db-stat">
+    <button
+      type="button"
+      onClick={onClick}
+      className={"db-stat" + (active ? " db-stat-active" : "")}
+    >
       <p>{title}</p>
       <h3>{value}</h3>
-    </div>
+    </button>
   );
 }

@@ -4,17 +4,9 @@ import api from "../api/client";
 const initialForm = {
   company: "",
   role: "",
-  status: "Online Test",
   appliedDate: "",
   notes: "",
 };
-
-const STATUS_OPTIONS = [
-  <option>Online Test</option>,
-  <option>Group Discussion</option>,
-  <option>Technical Interview</option>,
-  <option>HR Interview</option>,
-];
 
 export default function JobForm({ onCreated }) {
   const [form, setForm] = useState(initialForm);
@@ -38,7 +30,6 @@ export default function JobForm({ onCreated }) {
 
     if (!form.company.trim()) nextErrors.company = "Company is required.";
     if (!form.role.trim()) nextErrors.role = "Role is required.";
-    if (!form.status.trim()) nextErrors.status = "Status is required.";
     if (!form.appliedDate) {
       nextErrors.appliedDate = "Applied date is required.";
     } else if (Number.isNaN(new Date(form.appliedDate).getTime())) {
@@ -55,9 +46,16 @@ export default function JobForm({ onCreated }) {
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) return;
 
+    const payload = {
+      company: form.company.trim(),
+      role: form.role.trim(),
+      appliedDate: form.appliedDate,
+      notes: form.notes.trim(),
+    };
+
     try {
       setIsSaving(true);
-      await api.post("/api/applications", form);
+      await api.post("/api/applications", payload);
       setForm(initialForm);
       setErrors({});
       onCreated?.();
@@ -75,7 +73,7 @@ export default function JobForm({ onCreated }) {
     <section className="jf-card">
       <div className="jf-head">
         <h2>Create Job</h2>
-        <p>Add the company, role, stage, and useful details like the job description.</p>
+        <p>Add company, role and useful notes. Status is set automatically.</p>
       </div>
 
       {errors.form ? <div className="jf-alert">{errors.form}</div> : null}
@@ -106,24 +104,6 @@ export default function JobForm({ onCreated }) {
               className={errors.role ? "has-error" : ""}
             />
             {errors.role ? <p className="jf-error">{errors.role}</p> : null}
-          </div>
-
-          <div>
-            <label htmlFor="status">Status *</label>
-            <select
-              id="status"
-              name="status"
-              value={form.status}
-              onChange={handleChange}
-              className={errors.status ? "has-error" : ""}
-            >
-              {STATUS_OPTIONS.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-            {errors.status ? <p className="jf-error">{errors.status}</p> : null}
           </div>
 
           <div>
