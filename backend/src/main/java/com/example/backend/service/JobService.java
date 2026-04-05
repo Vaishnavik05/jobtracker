@@ -8,17 +8,20 @@ import com.example.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 
 @RequiredArgsConstructor
 @Service
+@Transactional
 public class JobService {
 
     private final JobRepository repo;
@@ -34,13 +37,13 @@ public class JobService {
     public Job saveWithUser(Job job, String username) {
         User user = userRepo.findByUsername(username)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
-        if (job != null && user != null) {
-            job.setId(null);
-            job.setUser(user);
-            job.setStatus("Online Test"); // force default on create
-            return repo.save(job);
+
+        if (job == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid job");
         }
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid job or user");
+
+        job.setUser(user);
+        return repo.save(job);
     }
 
     public Job getJobById(Long id) {
@@ -67,10 +70,8 @@ public class JobService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
         Long jobUserId = job.getUser() != null ? job.getUser().getId() : null;
-        Long userId = user.getId();
-
-        if (!Objects.equals(jobUserId, userId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to access this job");
+        if (!Objects.equals(jobUserId, user.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
 
         return job;
@@ -78,7 +79,7 @@ public class JobService {
 
     public Job update(Job job) {
         if (job == null || job.getId() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job id is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid job");
         }
         return repo.save(job);
     }
@@ -87,38 +88,23 @@ public class JobService {
         if (id == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job id is required");
         }
-        if (!repo.existsById(id)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found");
-        }
         repo.deleteById(id);
     }
 
     public void deleteByIdAndUser(Long id, String username) {
-        if (id == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job id is required");
-        }
-        getJobByIdAndUser(id, username);
-        repo.deleteById(id);
+        Job job = getJobByIdAndUser(id, username);
+        repo.delete(job);
     }
 
     public List<Job> getJobsByUserIdAndStatus(Long userId, String status) {
-        if (userId == null) {
-            return List.of();
-        }
         return repo.findByUserIdAndStatus(userId, status);
     }
 
     public List<Job> getJobsByUserIdAndCompany(Long userId, String company) {
-        if (userId == null) {
-            return List.of();
-        }
         return repo.findByUserIdAndCompanyIgnoreCase(userId, company);
     }
 
     public List<Job> getJobsByUserIdStatusAndCompany(Long userId, String status, String company) {
-        if (userId == null) {
-            return List.of();
-        }
         return repo.findByUserIdAndStatusAndCompanyIgnoreCase(userId, status, company);
     }
 
@@ -127,70 +113,34 @@ public class JobService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
         Long userId = user.getId();
-        if (userId == null) return Map.of();
-
         Map<String, Long> stats = new HashMap<>();
         stats.put("total", repo.countByUserId(userId));
-        stats.put("onlineTest", repo.countByUserIdAndStatus(userId, "Online Test"));
-        stats.put("groupDiscussion", repo.countByUserIdAndStatus(userId, "Group Discussion"));
-        stats.put("technicalInterview", repo.countByUserIdAndStatus(userId, "Technical Interview"));
-        stats.put("hrInterview", repo.countByUserIdAndStatus(userId, "HR Interview"));
+        stats.put("applied", repo.countByUserIdAndStatus(userId, "Applied"));
+        stats.put("interview", repo.countByUserIdAndStatus(userId, "HR Interview"));
+        stats.put("offers", repo.countByUserIdAndStatus(userId, "Offer"));
+        stats.put("rejected", repo.countByUserIdAndStatus(userId, "Rejected"));
         return stats;
     }
 
     public List<Job> getAllApplicationsForAdmin() {
-        return repo.findByUserIsNotNull();
+        return repo.findByUserIsNotNull();  // Returns only user-applied jobs
     }
 
     public Job createForAdmin(Job job, String username) {
         if (job == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid job payload");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid job");
         }
-
-        if (username == null || username.trim().isEmpty()) {
-            String company = job.getCompany() == null ? "" : job.getCompany().trim();
-            String role = job.getRole() == null ? "" : job.getRole().trim();
-            String location = job.getLocation() == null ? "" : job.getLocation().trim();
-            LocalDate postedDate = job.getAppliedDate();
-
-            if (postedDate == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Posted date is required");
-            }
-
-            if (repo.existsPublicDuplicate(company, role, location, postedDate)) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Duplicate public job already exists");
-            }
-
-            job.setUser(null);
-            job.setAppliedDate(postedDate);
-            return repo.save(job);
-        }
-
-        User user = userRepo.findByUsername(username.trim())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
-        job.setUser(user);
         return repo.save(job);
     }
 
     public Job updateForAdmin(Long id, Job payload, String username) {
-        if (id == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job id is required");
-        }
-        if (payload == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid job payload");
-        }
-
-        Job existing = repo.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
-
-        existing.setCompany(payload.getCompany() != null ? payload.getCompany() : existing.getCompany());
-        existing.setRole(payload.getRole() != null ? payload.getRole() : existing.getRole());
-        existing.setStatus(payload.getStatus() != null ? payload.getStatus() : existing.getStatus());
-        existing.setAppliedDate(payload.getAppliedDate() != null ? payload.getAppliedDate() : existing.getAppliedDate());
-        existing.setLocation(payload.getLocation() != null ? payload.getLocation() : existing.getLocation());
-        existing.setNotes(payload.getNotes() != null ? payload.getNotes() : existing.getNotes());
-
-        // IMPORTANT: keep existing user relation (do NOT force null)
+        Job existing = getJobById(id);
+        existing.setCompany(payload.getCompany());
+        existing.setRole(payload.getRole());
+        existing.setStatus(payload.getStatus());
+        existing.setAppliedDate(payload.getAppliedDate());
+        existing.setLocation(payload.getLocation());
+        existing.setNotes(payload.getNotes());
         return repo.save(existing);
     }
 
@@ -199,86 +149,89 @@ public class JobService {
     }
 
     public Map<String, Object> getAdminStats() {
-        Map<String, Object> stats = new HashMap<>();
-
-        stats.put("totalJobs", repo.countDistinctJobPostings());
-        stats.put("usersApplied", repo.countDistinctUsersWithApplications());
-        stats.put("totalCompanies", repo.countDistinctCompanies());
-        stats.put("usersWithOffers", repo.countDistinctUsersWithOffers());
-
-        Map<String, Long> byStatus = new HashMap<>();
-        for (Object[] row : repo.countByStatusGrouped()) {
-            String status = row[0] == null ? "Unknown" : row[0].toString();
-            Long count = ((Number) row[1]).longValue();
-            byStatus.put(status, count);
-        }
-        stats.put("byStatus", byStatus);
-
+        long postedJobs = repo.countPostedJobsForAdmin(); // admin-posted jobs
+        long userApplications = repo.countUserApplications(); // user applications
+        long distinctUsers = repo.countDistinctUsersWithApplications(); // users with apps
+        long distinctCompanies = repo.countDistinctPostedCompanies();
+        long usersWithOffers = repo.countDistinctUsersWithOffers();
+        
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("totalJobs", postedJobs);         // rename to match frontend
+        stats.put("usersApplied", distinctUsers);
+        stats.put("totalCompanies", distinctCompanies); // rename to match frontend
+        stats.put("usersWithOffers", usersWithOffers);
+        
         return stats;
     }
 
     private boolean isAdmin(String username) {
         return userRepo.findByUsername(username)
-                .map(u -> u.getRole() != null && "ADMIN".equals(u.getRole().name()))
+                .map(user -> user.getRole() == Role.ADMIN)
                 .orElse(false);
     }
 
     public List<Job> getPublicJobs() {
-        return repo.findPublicJobs(Role.ADMIN);
+        LocalDateTime now = LocalDateTime.now();
+        return repo.findPublicJobs()
+                .stream()
+                .filter(job -> isPublicJobActive(job, now))
+                .toList();
     }
 
     public Job applyToPublicJob(Long jobId, String username) {
-        if (jobId == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Job id is required");
+        Job source = getJobById(jobId);
+
+        // Only public/admin posted jobs can be applied.
+        if (!isPublicOrAdminPosted(source)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Public job not found");
+        }
+
+        // Enforce availability window: posted day + next day, until 12 AM after next day.
+        if (!isPublicJobActive(source, LocalDateTime.now())) {
+            throw new ResponseStatusException(HttpStatus.GONE, "This job is inactive");
         }
 
         User user = userRepo.findByUsername(username)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-        Job publicJob = repo.findById(jobId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
-
-        boolean isPublic = publicJob.getUser() == null
-                || publicJob.getUser().getRole() == Role.ADMIN;
-
-        if (!isPublic) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This is not a public job");
-        }
-
-        // Apply window is based on admin-entered appliedDate (used as posted date)
-        LocalDate postedDate = publicJob.getAppliedDate();
-        if (postedDate == null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This job is inactive (missing posted date)");
-        }
-
-        long daysSincePosted = ChronoUnit.DAYS.between(postedDate, LocalDate.now());
-        if (daysSincePosted >= 1) {
-            throw new ResponseStatusException(HttpStatus.GONE, "This job is inactive. Apply window closed");
-        }
-
         boolean alreadyApplied = repo.existsByUserIdAndCompanyIgnoreCaseAndRoleIgnoreCase(
                 user.getId(),
-                publicJob.getCompany(),
-                publicJob.getRole()
+                source.getCompany(),
+                source.getRole()
         );
-
         if (alreadyApplied) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "You already applied for this job");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "You already applied to this job");
         }
 
         Job applied = new Job();
-        applied.setCompany(publicJob.getCompany());
-        applied.setRole(publicJob.getRole());
-        applied.setStatus("Online Test");
-        applied.setAppliedDate(publicJob.getAppliedDate());
-        applied.setLocation(publicJob.getLocation());
-        applied.setNotes(publicJob.getNotes());
+        applied.setCompany(source.getCompany());
+        applied.setRole(source.getRole());
+        applied.setStatus("Applied");
+        applied.setAppliedDate(LocalDate.now());
+        applied.setLocation(source.getLocation());
+        applied.setNotes(source.getNotes());
         applied.setUser(user);
 
         return repo.save(applied);
     }
 
-    public List<Job> getPublicJobs(String username) {
-        return getPublicJobs();
+    private boolean isPublicOrAdminPosted(Job job) {
+        if (job.getUser() == null) {
+            return true;
+        }
+        User owner = job.getUser();
+        if (owner.getRole() == Role.ADMIN) {
+            return true;
+        }
+        String ownerName = owner.getUsername() == null ? "" : owner.getUsername().trim().toLowerCase();
+        return "admin".equals(ownerName);
+    }
+
+    private boolean isPublicJobActive(Job job, LocalDateTime now) {
+        if (job.getCreatedAt() == null) return false;
+        // Job is active from createdAt until the end of the next day (23:59:59)
+        LocalDate postedDate = job.getCreatedAt().toLocalDate();
+        LocalDateTime expiresAt = postedDate.plusDays(1).atTime(23, 59, 59);
+        return !now.isAfter(expiresAt);
     }
 }

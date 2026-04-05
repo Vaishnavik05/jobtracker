@@ -3,10 +3,18 @@ package com.example.backend.controller;
 import com.example.backend.model.Job;
 import com.example.backend.service.JobService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -43,7 +51,9 @@ public class AdminApplicationController {
     ) {}
 
     private LocalDate parseDateFlexible(String value) {
-        if (value == null || value.isBlank()) return null;
+        if (value == null || value.isBlank()) {
+            return null;
+        }
 
         try {
             return LocalDate.parse(value);
@@ -101,23 +111,25 @@ public class AdminApplicationController {
         Job job = new Job();
         job.setCompany(company);
         job.setRole(role);
-        job.setStatus(null);
+        job.setStatus(safe(request.status()).isEmpty() ? "Online Test" : safe(request.status()));
         job.setAppliedDate(parseDateFlexible(request.appliedDate()));
         job.setLocation(location);
         job.setNotes(request.notes());
 
-        Job saved = jobService.createForAdmin(job, "");
+        Job saved = jobService.createForAdmin(job, safe(request.username()));
 
-        return ResponseEntity.ok(new AdminApplicationResponse(
+        AdminApplicationResponse response = new AdminApplicationResponse(
                 saved.getId(),
-                "",
+                saved.getUser() != null ? saved.getUser().getUsername() : "",
                 saved.getCompany(),
                 saved.getRole(),
                 saved.getStatus(),
                 saved.getAppliedDate(),
                 saved.getLocation(),
                 saved.getNotes()
-        ));
+        );
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PutMapping("/{id}")
@@ -125,32 +137,17 @@ public class AdminApplicationController {
             @PathVariable Long id,
             @RequestBody AdminApplicationRequest request
     ) {
-        String company = safe(request.company());
-        String role = safe(request.role());
-        String status = safe(request.status());
-        String location = safe(request.location());
-
-        if (company.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Company is required");
-        }
-        if (role.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role is required");
-        }
-        if (status.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status is required while editing");
-        }
-
         Job payload = new Job();
-        payload.setCompany(company);
-        payload.setRole(role);
-        payload.setStatus(status);
+        payload.setCompany(safe(request.company()));
+        payload.setRole(safe(request.role()));
+        payload.setStatus(safe(request.status()));
         payload.setAppliedDate(parseDateFlexible(request.appliedDate()));
-        payload.setLocation(location);
+        payload.setLocation(safe(request.location()));
         payload.setNotes(request.notes());
 
-        Job updated = jobService.updateForAdmin(id, payload, "");
+        Job updated = jobService.updateForAdmin(id, payload, safe(request.username()));
 
-        return ResponseEntity.ok(new AdminApplicationResponse(
+        AdminApplicationResponse response = new AdminApplicationResponse(
                 updated.getId(),
                 updated.getUser() != null ? updated.getUser().getUsername() : "",
                 updated.getCompany(),
@@ -159,7 +156,9 @@ public class AdminApplicationController {
                 updated.getAppliedDate(),
                 updated.getLocation(),
                 updated.getNotes()
-        ));
+        );
+
+        return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/{id}")

@@ -266,7 +266,7 @@ export default function AdminDashboard() {
           ))}
         </section>
 
-        <section className="ad-status-strip">
+        {/* <section className="ad-status-strip">
           {Object.entries(stats.byStatus || {}).length === 0 ? (
             <div className="ad-status-pill">No status data yet</div>
           ) : (
@@ -277,7 +277,7 @@ export default function AdminDashboard() {
               </div>
             ))
           )}
-        </section>
+        </section> */}
 
         <section className="ad-panel">
           <div className="ad-panel-head">

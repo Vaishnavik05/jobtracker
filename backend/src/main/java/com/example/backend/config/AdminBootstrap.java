@@ -7,8 +7,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
+@Transactional
 @RequiredArgsConstructor
 public class AdminBootstrap implements CommandLineRunner {
 
@@ -19,7 +21,6 @@ public class AdminBootstrap implements CommandLineRunner {
     public void run(String... args) {
         userRepository.findByUsername("admin").ifPresentOrElse(
             existing -> {
-                // Ensure role and password are fixed for admin account
                 existing.setRole(Role.ADMIN);
                 existing.setPassword(passwordEncoder.encode("1234"));
                 userRepository.save(existing);
