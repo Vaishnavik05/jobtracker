@@ -91,9 +91,10 @@ export default function AdminDashboard() {
   }, [role]);
 
   useEffect(() => {
-    if (!success) return;
-    const id = setTimeout(() => setSuccess(""), 2200);
-    return () => clearTimeout(id);
+    if (success) {
+      const timer = setTimeout(() => setSuccess(""), 3000);
+      return () => clearTimeout(timer);
+    }
   }, [success]);
 
   const filteredRows = useMemo(() => {
@@ -226,6 +227,19 @@ export default function AdminDashboard() {
     },
   ];
 
+  const handleCreateJob = async () => {
+    setSaving(true);
+    try {
+      await api.post("/api/admin/applications", form);
+      setSuccess("Job created");
+      // ...reset form, reload jobs, etc.
+    } catch (err) {
+      setError("Failed to create job");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (role !== "ADMIN") {
     return (
       <main className="ad-wrap">
@@ -253,8 +267,12 @@ export default function AdminDashboard() {
           </button>
         </header>
 
-        {error ? <div className="ad-alert ad-alert-error">{error}</div> : null}
-        {success ? <div className="ad-alert ad-alert-success">{success}</div> : null}
+        {error && <div className="alert alert-error">{error}</div>}
+        {success && (
+          <div className="fixed top-6 right-6 z-50 bg-green-600 text-white px-6 py-3 rounded shadow-lg animate-slideIn">
+            {success}
+          </div>
+        )}
 
         <section className="ad-stats-grid">
           {cardData.map((card) => (
@@ -265,6 +283,7 @@ export default function AdminDashboard() {
             </article>
           ))}
         </section>
+
 
         {/* <section className="ad-status-strip">
           {Object.entries(stats.byStatus || {}).length === 0 ? (
