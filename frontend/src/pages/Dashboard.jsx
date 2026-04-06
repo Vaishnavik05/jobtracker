@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [filters, setFilters] = useState({ status: "", company: "" });
 
   const [publicJobs, setPublicJobs] = useState([]);
+  const [loadingPublicJobs, setLoadingPublicJobs] = useState(true);
   const [applyingId, setApplyingId] = useState(null);
 
   const [error, setError] = useState("");
@@ -34,11 +35,14 @@ export default function Dashboard() {
   };
 
   const loadPublicJobs = async () => {
+    setLoadingPublicJobs(true);
     try {
       const res = await api.get("/api/applications/public-jobs");
       setPublicJobs(res.data || []);
     } catch {
       setError("Failed to load public jobs");
+    } finally {
+      setLoadingPublicJobs(false);
     }
   };
 
@@ -90,41 +94,35 @@ export default function Dashboard() {
     [allJobs]
   );
 
-  const visibleApplications = useMemo(() => {
-    let list = [...allJobs];
-
-    if (view === "applied") {
-      return list;
+  const visibleJobs = useMemo(() => {
+    switch (view) {
+      case "applied":
+        return appliedJobs;
+      case "notApplied":
+        return notAppliedJobs;
+      case "offers":
+        return offerJobs;
+      case "rejected":
+        return rejectedJobs;
+      case "all":
+      default:
+        return publicJobs;
     }
+  }, [view, publicJobs, appliedJobs, notAppliedJobs, offerJobs, rejectedJobs]);
 
-    if (view === "notApplied") {
-      const appliedKeys = new Set(
-        allJobs.map(
-          (a) =>
-            `${a.company?.toLowerCase()}|${a.role?.toLowerCase()}|${a.location?.toLowerCase()}`
-        )
-      );
+  const filteredJobs = useMemo(() => {
+    return jobs.filter(job => {
+      const matchesCompany = filters.company
+        ? job.company.toLowerCase().includes(filters.company.toLowerCase())
+        : true;
+      const matchesStatus = filters.status
+        ? job.status === filters.status
+        : true;
+      return matchesCompany && matchesStatus;
+    });
+  }, [jobs, filters]);
 
-      return publicJobs.filter(
-        (job) =>
-          !appliedKeys.has(
-            `${job.company?.toLowerCase()}|${job.role?.toLowerCase()}|${job.location?.toLowerCase()}`
-          )
-      );
-    }
-
-    if (view === "offers") {
-      return list.filter((a) => a.status === "HR Interview");
-    }
-
-    if (view === "rejected") {
-      return list.filter((a) => a.status === "Rejected");
-    }
-
-    // default = all
-    return list;
-  }, [view, allJobs, publicJobs]);
-
+  // ================= UI =================
   return (
     <div className="db-page">
       <div className="db-shell">
@@ -134,8 +132,8 @@ export default function Dashboard() {
           <button onClick={logout}>Logout</button>
         </div>
 
+        {/* ================= STAT CARDS ================= */}
         <div className="db-stats">
-
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
             <StatCard
               title="Total Jobs"
@@ -168,19 +166,9 @@ export default function Dashboard() {
               onClick={() => setView("rejected")}
             />
           </div>
-
-          <StatCard title="All Jobs" value={jobs.length} active={view==="all"} onClick={()=>setView("all")} />
-
-          <StatCard title="Applied Jobs" value={appliedJobs.length} active={view==="applied"} onClick={()=>setView("applied")} />
-
-          <StatCard title="Not Applied" value={notAppliedJobs.length} active={view==="notApplied"} onClick={()=>setView("notApplied")} />
-
-          <StatCard title="Offers" value={offerJobs.length} active={view==="offers"} onClick={()=>setView("offers")} />
-
-          <StatCard title="Rejected" value={rejectedJobs.length} active={view==="rejected"} onClick={()=>setView("rejected")} />
-
         </div>
 
+        {/* ================= JOB LIST ================= */}
         <section>
           <h2 className="text-xl font-bold text-gray-900">
             {view === "all" && "All Applications"}
@@ -189,42 +177,57 @@ export default function Dashboard() {
             {view === "offers" && "Offers"}
             {view === "rejected" && "Rejected Jobs"}
           </h2>
-          <JobList jobs={visibleApplications} refresh={loadData} />
+          {view === "all" && loadingPublicJobs ? (
+            <div>Loading jobs...</div>
+          ) : view === "all" && visibleJobs.length === 0 ? (
+            <div>No jobs available</div>
+          ) : (
+            <JobList jobs={filteredJobs} />
+          )}
         </section>
 
+        {/* ================= PUBLIC JOBS ================= */}
         <section>
-          <h2>All Available Jobs</h2>
-
-          {publicJobs.map((job) => {
-            const alreadyApplied = appliedJobs.some(
-              (j) => jobKey(j) === jobKey(job)
-            );
-
-            return (
-              <div key={job.id} className="job-card">
-                <h3>{job.company}</h3>
-                <p>{job.role}</p>
-
-                <button
-                  disabled={alreadyApplied || applyingId === job.id}
-                  onClick={() => handleApply(job.id)}
-                >
-                  {alreadyApplied
-                    ? "Applied"
-                    : applyingId === job.id
-                    ? "Applying..."
-                    : "Apply"}
-                </button>
-              </div>
-            );
-          })}
+          <div className="flex items-center justify-between">
+            <h2>All Available Jobs</h2>
+            <button className="btn" onClick={loadPublicJobs}>
+              Refresh Jobs
+            </button>
+          </div>
+          {loadingPublicJobs ? (
+            <div>Loading jobs...</div>
+          ) : publicJobs.length === 0 ? (
+            <div>No jobs available</div>
+          ) : (
+            publicJobs.map((job) => {
+              const alreadyApplied = appliedJobs.some(
+                (j) => jobKey(j) === jobKey(job)
+              );
+              return (
+                <div key={job.id} className="job-card">
+                  <h3>{job.company}</h3>
+                  <p>{job.role}</p>
+                  <button
+                    disabled={alreadyApplied || applyingId === job.id}
+                    onClick={() => handleApply(job.id)}
+                  >
+                    {alreadyApplied
+                      ? "Applied"
+                      : applyingId === job.id
+                      ? "Applying..."
+                      : "Apply"}
+                  </button>
+                </div>
+              );
+            })
+          )}
         </section>
-
       </div>
     </div>
   );
 }
 
+// ================= STAT CARD =================
 function StatCard({ title, value, active, onClick }) {
   return (
     <button

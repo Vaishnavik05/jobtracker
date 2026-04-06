@@ -1,7 +1,6 @@
 package com.example.backend.repository;
 
 import com.example.backend.model.Job;
-import com.example.backend.model.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

@@ -6,25 +6,31 @@ import { useAuth } from "./context/AuthContext";
 import "./App.css";
 import AdminDashboard from "./pages/AdminDashboard";
 
-const STATUS_OPTIONS = [
+// All possible statuses — covers both admin-set and user-application stages
+const ALL_STATUS_OPTIONS = [
   "Online Test",
   "Group Discussion",
   "Technical Interview",
   "HR Interview",
+  "Offer",
+  "Rejected",
 ];
-
-const STATUS_BADGE_COLORS = {
-  "Online Test": "bg-blue-100 text-blue-800",
-  "Group Discussion": "bg-purple-100 text-purple-800",
-  "Technical Interview": "bg-amber-100 text-amber-800",
-  "HR Interview": "bg-emerald-100 text-emerald-800",
-};
 
 const STATUS_CHART_COLORS = {
   "Online Test": "#3b82f6",
   "Group Discussion": "#8b5cf6",
   "Technical Interview": "#f59e0b",
   "HR Interview": "#10b981",
+};
+
+// Badge styles for the user's current round
+const STATUS_BADGE = {
+  "Online Test": "bg-blue-100 text-blue-800",
+  "Group Discussion": "bg-purple-100 text-purple-800",
+  "Technical Interview": "bg-amber-100 text-amber-800",
+  "HR Interview": "bg-emerald-100 text-emerald-800",
+  "Offer": "bg-green-100 text-green-800",
+  "Rejected": "bg-red-100 text-red-800",
 };
 
 const emptyForm = {
@@ -212,10 +218,7 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
   };
 
   useEffect(() => {
-    if (!token) {
-      setApplications([]);
-      return;
-    }
+    if (!token) { setApplications([]); return; }
     void loadApplications();
   }, [token]);
 
@@ -225,70 +228,75 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
   }, [token]);
 
   const stats = useMemo(() => {
-    // Total jobs should be all admin-posted jobs visible to user
     const total = publicJobs.length;
-
-    // Applied jobs = jobs user already applied
     const applied = applications.length;
-
-    // Not applied = remaining public jobs
     const notApplied = Math.max(total - applied, 0);
-
-    const offers = applications.filter((application) => application.status === "HR Interview").length;
-    const rejected = applications.filter((application) => application.status === "Rejected").length;
-
+    const offers = applications.filter((a) => a.status === "Offer").length;
+    const rejected = applications.filter((a) => a.status === "Rejected").length;
     return { total, applied, notApplied, offers, rejected };
   }, [applications, publicJobs]);
 
   const chartData = useMemo(() => {
-    const counts = STATUS_OPTIONS.reduce((accumulator, status) => {
-      accumulator[status] = 0;
-      return accumulator;
-    }, {});
-    for (const application of applications) {
-      if (Object.prototype.hasOwnProperty.call(counts, application.status)) {
-        counts[application.status] += 1;
-      }
+    const counts = Object.fromEntries(ALL_STATUS_OPTIONS.map((s) => [s, 0]));
+    for (const app of applications) {
+      if (counts[app.status] !== undefined) counts[app.status] += 1;
     }
-    return STATUS_OPTIONS.map((status) => ({
-      label: status,
-      value: counts[status],
-      color: STATUS_CHART_COLORS[status],
-    }));
+    // Only chart the 4 interview-pipeline stages
+    return ALL_STATUS_OPTIONS
+      .filter((s) => STATUS_CHART_COLORS[s])
+      .map((status) => ({
+        label: status,
+        value: counts[status],
+        color: STATUS_CHART_COLORS[status],
+      }));
   }, [applications]);
 
-  const filteredApplications = useMemo(() => {
+  // Filter public jobs — search by name, and when status filter is set,
+  // match against the USER's current status for that job (not the job's initial stage).
+  const filteredPublicJobs = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
-    return applications.filter((application) => {
-      const company = String(application.company || "").toLowerCase();
-      const role = String(application.role || "").toLowerCase();
+
+    return publicJobs.filter((job) => {
+      const company = String(job.company || "").toLowerCase();
+      const role = String(job.role || "").toLowerCase();
 
       const matchesSearch =
         normalizedSearch.length === 0 ||
         company.includes(normalizedSearch) ||
         role.includes(normalizedSearch);
 
-      const matchesStatus = filterStatus === "All" || application.status === filterStatus;
+      if (!matchesSearch) return false;
 
-      return matchesSearch && matchesStatus;
+      // When a status filter is active, find the user's application for this job
+      // and check if their current stage matches the filter.
+      if (filterStatus !== "All") {
+        const userApp = applications.find((app) => {
+          // Prefer jobId match if backend provides it
+          if (app.jobId && job.id) return app.jobId === job.id;
+          // Fallback: match by company + role + location
+          return (
+            (app.company ?? "").trim().toLowerCase() === (job.company ?? "").trim().toLowerCase() &&
+            (app.role ?? "").trim().toLowerCase() === (job.role ?? "").trim().toLowerCase() &&
+            (app.location ?? "").trim().toLowerCase() === (job.location ?? "").trim().toLowerCase()
+          );
+        });
+        if (!userApp) return false; // not applied → can't match a user-status filter
+        if (userApp.status !== filterStatus) return false;
+      }
+
+      return true;
     });
-  }, [applications, searchTerm, filterStatus]);
+  }, [publicJobs, applications, searchTerm, filterStatus]);
 
   useEffect(() => {
     if (!success) return;
-    const timer = setTimeout(() => {
-      setSuccess("");
-    }, 5000);
+    const timer = setTimeout(() => setSuccess(""), 5000);
     return () => clearTimeout(timer);
   }, [success]);
 
   const handleChange = (event) => {
-    const name = event.target.name;
-    const value = event.target.value;
-    setForm((current) => ({
-      ...current,
-      [name]: value,
-    }));
+    const { name, value } = event.target;
+    setForm((current) => ({ ...current, [name]: value }));
   };
 
   const resetForm = () => {
@@ -316,10 +324,7 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
     }
 
     try {
-      await request("", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
+      await request("", { method: "POST", body: JSON.stringify(payload) });
       setSuccess("Application added successfully.");
       setForm(emptyForm);
       setShowForm(false);
@@ -331,6 +336,8 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
 
   const handleViewJobs = async () => {
     setShowPublicJobs(true);
+    setSearchTerm("");
+    setFilterStatus("All");
     await loadPublicJobs();
   };
 
@@ -353,11 +360,8 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
     if (!dateValue) return false;
     const posted = new Date(dateValue + "T00:00:00");
     if (Number.isNaN(posted.getTime())) return false;
-
     const ONE_DAY_MS = 24 * 60 * 60 * 1000;
     const diff = Date.now() - posted.getTime();
-
-    // open only during first 24 hours from admin posted date
     return diff >= 0 && diff < ONE_DAY_MS;
   };
 
@@ -386,9 +390,7 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
             <div className="flex-1">
               <p className="text-red-800 text-sm font-medium">{error}</p>
             </div>
-            <button onClick={() => setError("")} className="text-red-600 hover:text-red-900">
-              x
-            </button>
+            <button onClick={() => setError("")} className="text-red-600 hover:text-red-900">x</button>
           </div>
         )}
 
@@ -407,6 +409,7 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
           </div>
         )}
 
+        {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
             <p className="text-gray-600 text-sm font-medium">Total Jobs</p>
@@ -454,7 +457,6 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
                     required
                   />
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Job Title *</label>
                   <input
@@ -467,7 +469,6 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
                     required
                   />
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Posted Date *</label>
                   <input
@@ -480,7 +481,6 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
                   />
                 </div>
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
                 <textarea
@@ -491,7 +491,6 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
                   onChange={handleChange}
                 />
               </div>
-
               <div className="flex gap-3 justify-end">
                 <button
                   type="button"
@@ -511,6 +510,7 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
           </div>
         )}
 
+        {/* Search & filter — drives the All Jobs list */}
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 mb-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
@@ -525,14 +525,16 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Status</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Filter by Your Stage
+              </label>
               <select
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
               >
                 <option value="All">All Status</option>
-                {STATUS_OPTIONS.map((status) => (
+                {ALL_STATUS_OPTIONS.map((status) => (
                   <option key={status} value={status}>
                     {status}
                   </option>
@@ -553,8 +555,19 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
 
         {showPublicJobs && (
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 mb-8">
-            <h2 className="text-xl font-bold text-gray-900 mb-2">All Jobs</h2>
-            <p className="text-sm text-gray-600 mb-4">Click Apply to submit your application.</p>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-xl font-bold text-gray-900">All Jobs</h2>
+              {(searchTerm || filterStatus !== "All") && (
+                <span className="text-sm text-gray-500">
+                  Showing {filteredPublicJobs.length} of {publicJobs.length} jobs
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              {filterStatus !== "All"
+                ? `Showing jobs where your current stage is "${filterStatus}"`
+                : "Click Apply to submit your application."}
+            </p>
 
             {publicError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
@@ -564,28 +577,30 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
 
             {publicLoading ? (
               <div className="text-gray-500">Loading jobs...</div>
-            ) : publicJobs.length === 0 ? (
+            ) : filteredPublicJobs.length === 0 ? (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-blue-900 text-sm">
-                No admin-posted jobs available right now.
+                {publicJobs.length === 0
+                  ? "No admin-posted jobs available right now."
+                  : filterStatus !== "All"
+                    ? `No jobs found where you're currently at the "${filterStatus}" stage.`
+                    : "No jobs match your search. Try different keywords."}
               </div>
             ) : (
               <div className="space-y-3">
-                {publicJobs.map((job) => {
-                  const jobCompany = (job?.company ?? "").trim().toLowerCase();
-                  const jobRole = (job?.role ?? "").trim().toLowerCase();
-                  const jobLocation = (job?.location ?? "").trim().toLowerCase();
-
-                  const isApplied = applications.some((app) => {
-                    const appCompany = (app?.company ?? "").trim().toLowerCase();
-                    const appRole = (app?.role ?? "").trim().toLowerCase();
-                    const appLocation = (app?.location ?? "").trim().toLowerCase();
-
+                {filteredPublicJobs.map((job) => {
+                  // Find the user's own application for this specific job
+                  const userApp = applications.find((app) => {
+                    if (app.jobId && job.id) return app.jobId === job.id;
                     return (
-                      appCompany === jobCompany &&
-                      appRole === jobRole &&
-                      appLocation === jobLocation
+                      (app.company ?? "").trim().toLowerCase() === (job.company ?? "").trim().toLowerCase() &&
+                      (app.role ?? "").trim().toLowerCase() === (job.role ?? "").trim().toLowerCase() &&
+                      (app.location ?? "").trim().toLowerCase() === (job.location ?? "").trim().toLowerCase()
                     );
                   });
+
+                  const isApplied = !!userApp;
+                  // This is the LIVE status admin has set for this user's application
+                  const userCurrentStatus = userApp?.status ?? null;
 
                   const windowOpen = isApplyWindowOpen(job?.appliedDate);
                   const isBusy = applyingId === job.id;
@@ -596,45 +611,41 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
                       key={job.id}
                       className="border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
                     >
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-semibold text-gray-900">{job.company || "Company"}</h3>
-                          <span className="text-sm font-medium text-gray-700">{job.role || "Role"}</span>
-                        </div>
-
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                          <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700">
-                            {job.status || "Online Test"}
-                          </span>
-                          <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-700">
+                          <h3 className="font-semibold text-gray-1000">{job.company || "Company"}</h3>
+                          <span className="text-sm font-medium text-gray-800">{job.role || "Role"}</span>
+                          <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700">
                             {job.location || "Location not specified"}
                           </span>
                         </div>
+                        {isApplied && userCurrentStatus && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <span className="text-xs text-gray-500 font-medium">Your current stage:</span>
+                            <span
+                              className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${STATUS_BADGE[userCurrentStatus] ?? "bg-gray-100 text-gray-700"
+                                }`}
+                            >
+                              {userCurrentStatus}
+                            </span>
+                          </div>
+                        )}
 
-                        {job.notes ? <p className="text-sm text-gray-600 mt-2">{job.notes}</p> : null}
-
-                        {/* <p
-                          className={
-                            "text-sm font-semibold mt-2 inline-flex items-center rounded-full px-2.5 py-1 " +
-                            (isApplied
-                              ? "bg-green-100 text-green-700"
-                              : "bg-amber-100 text-amber-700")
-                          }
-                        >
-                          {isApplied ? "Applied" : "Not Applied"}
-                        </p> */}
+                        {job.notes ? (
+                          <p className="text-sm text-gray-600 mt-2">{job.notes}</p>
+                        ) : null}
                       </div>
 
                       <button
                         onClick={() => handleApplyToPublicJob(job.id)}
                         disabled={disableApply}
                         className={
-                          "px-4 py-2 rounded-lg disabled:opacity-60 " +
+                          "px-4 py-2 rounded-lg disabled:opacity-60 whitespace-nowrap " +
                           (isApplied
                             ? "bg-green-600 text-white cursor-not-allowed"
                             : !windowOpen
-                            ? "bg-slate-400 text-white cursor-not-allowed"
-                            : "bg-blue-600 text-white hover:bg-blue-700")
+                              ? "bg-slate-400 text-white cursor-not-allowed"
+                              : "bg-blue-600 text-white hover:bg-blue-700")
                         }
                       >
                         {isApplied ? "Applied" : !windowOpen ? "Inactive" : isBusy ? "Applying..." : "Apply"}
@@ -646,53 +657,6 @@ function DashboardContent({ title, subtitle, showCharts = false }) {
             )}
           </div>
         )}
-
-        {/* <div className="space-y-4">
-          <h2 className="text-xl font-bold text-gray-900">Applications ({filteredApplications.length})</h2>
-
-          {loading ? (
-            <div className="flex justify-center py-12">
-              <div className="text-gray-500">Loading...</div>
-            </div>
-          ) : filteredApplications.length === 0 ? (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
-              <p className="text-blue-900">
-                No applications found. {searchTerm && "Try adjusting your search."}
-              </p>
-            </div>
-          ) : (
-            filteredApplications.map((application) => (
-              <div
-                key={application.id}
-                className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg transition"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900">{application.company}</h3>
-                    <p className="text-gray-600 font-medium">{application.role}</p>
-                  </div>
-                  <span
-                    className={
-                      "px-3 py-1 rounded-full text-sm font-semibold " +
-                      (STATUS_BADGE_COLORS[application.status] || "bg-gray-100 text-gray-700")
-                    }
-                  >
-                    {application.status}
-                  </span>
-                </div>
-
-                <div className="flex gap-6 text-sm text-gray-600">
-                  <span>{formatDate(application.appliedDate)}</span>
-                  {application.notes && (
-                    <span className="max-w-md">
-                      {application.notes.length > 50 ? application.notes.slice(0, 50) + "..." : application.notes}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </div> */}
       </div>
     </div>
   );
