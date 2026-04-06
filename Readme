@@ -1,0 +1,121 @@
+# Job Application Tracker
+
+A full-stack web application to track job applications, manage company events, and provide admin analytics.
+**Backend:** Spring Boot (Java 17, H2 DB, JWT)  
+**Frontend:** React, Tailwind CSS, DaisyUI
+
+---
+
+## Features
+
+### User
+- Register and login (JWT authentication)
+- Add, edit, delete, and view job applications
+- View company events
+- Filter/search job applications
+
+### Admin
+- Dashboard with statistics (jobs, users, companies, offers)
+- Manage all job applications and company events (CRUD)
+- View analytics (charts, status breakdowns)
+
+---
+
+## Tech Stack
+
+- **Backend:** Spring Boot, Spring Security, JPA/Hibernate, H2 Database, JWT
+- **Frontend:** React, React Router, Axios, Tailwind CSS, DaisyUI, Recharts
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Java 17+
+- Node.js 18+
+- Maven
+
+### Backend Setup
+
+1. Go to the backend folder:
+   ```
+   cd backend
+   ```
+2. Build and run:
+   ```
+   mvn spring-boot:run
+   ```
+3. The backend runs on [http://localhost:8080](http://localhost:8080)
+
+- H2 Console: [http://localhost:8080/h2-console](http://localhost:8080/h2-console)
+- Default admin:
+  - Username: `admin`
+  - Password: `1234`
+
+### Frontend Setup
+
+1. Go to the frontend folder:
+   ```
+   cd frontend
+   ```
+2. Install dependencies:
+   ```
+   npm install
+   ```
+3. Start the dev server:
+   ```
+   npm run dev
+   ```
+4. The frontend runs on [http://localhost:5173](http://localhost:5173)
+
+---
+
+## Project Structure
+
+```
+jobapplic/
+  backend/
+    src/main/java/com/example/backend/
+      config/
+      controller/
+      filter/
+      model/
+      repository/
+      service/
+    src/main/resources/
+    .gitignore
+    pom.xml
+  frontend/
+    src/
+      api/
+      components/
+      context/
+      pages/
+    .gitignore
+    package.json
+    tailwind.config.js
+```
+
+---
+
+## Environment Variables
+
+- Backend:  
+  - See application.properties for DB and JWT config.
+- Frontend:  
+  - API base URL is set in `src/api/client.js`.
+
+---
+
+## Notes
+
+- The H2 database file (job_tracker.mv.db) is ignored by git.
+- Do **not** commit database files.
+- For production, switch to a persistent database (e.g., PostgreSQL).
+
+---
+
+## License
+
+MIT (or your preferred license)
