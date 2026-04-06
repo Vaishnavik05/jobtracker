@@ -461,3 +461,24 @@ function StatCard({ title, value, active = false, onClick }) {
     </button>
   );
 }
+
+// Example for Bar Chart
+function ApplicationsBarChart({ data }) {
+  const stages = [
+    "Online Test",
+    "Group Discussion",
+    "Technical Interview",
+    "HR Interview",
+    "Offer",
+    "Rejected"
+  ];
+  return (
+    <div>
+      {stages.map(stage => (
+        <div key={stage}>
+          {stage}: {data[stage] || 0}
+        </div>
+      ))}
+    </div>
+  );
+}

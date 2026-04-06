@@ -97,6 +97,12 @@ public class JobController {
         return ResponseEntity.ok(jobService.getStats(username));
     }
 
+    @GetMapping("/stats/by-stage")
+    public ResponseEntity<Map<String, Long>> getJobCountsByStage(Authentication auth) {
+        String username = auth.getName();
+        return ResponseEntity.ok(jobService.getJobCountsByStatusForUser(username));
+    }
+
     @GetMapping("/public-jobs")
     public ResponseEntity<List<Job>> getPublicJobs() {
         return ResponseEntity.ok(jobService.getPublicJobs());
