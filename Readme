@@ -38,14 +38,12 @@ A full-stack web application to track job applications, manage company events, a
 
 ### Backend Setup
 
-1. Go to the backend folder:
-   ```
+1. Go to the backend folder:   
    cd backend
-   ```
+
 2. Build and run:
-   ```
    mvn spring-boot:run
-   ```
+
 3. The backend runs on [http://localhost:8080](http://localhost:8080)
 
 - H2 Console: [http://localhost:8080/h2-console](http://localhost:8080/h2-console)
@@ -56,24 +54,17 @@ A full-stack web application to track job applications, manage company events, a
 ### Frontend Setup
 
 1. Go to the frontend folder:
-   ```
    cd frontend
-   ```
 2. Install dependencies:
-   ```
    npm install
-   ```
 3. Start the dev server:
-   ```
    npm run dev
-   ```
 4. The frontend runs on [http://localhost:5173](http://localhost:5173)
 
 ---
 
 ## Project Structure
 
-```
 jobapplic/
   backend/
     src/main/java/com/example/backend/
@@ -95,7 +86,6 @@ jobapplic/
     .gitignore
     package.json
     tailwind.config.js
-```
 
 ---
 
@@ -111,7 +101,7 @@ jobapplic/
 ## Notes
 
 - The H2 database file (job_tracker.mv.db) is ignored by git.
-- Do **not** commit database files.
+- Don't commit database files.
 - For production, switch to a persistent database (e.g., PostgreSQL).
 
 ---
