@@ -123,7 +123,7 @@ public class JobService {
     }
 
     public List<Job> getAllApplicationsForAdmin() {
-        return repo.findByUserIsNotNull();  // Returns only user-applied jobs
+        return repo.findByUserIsNotNull();
     }
 
     public Job createForAdmin(Job job, String username) {
@@ -149,18 +149,18 @@ public class JobService {
     }
 
     public Map<String, Object> getAdminStats() {
-        long postedJobs = repo.countPostedJobsForAdmin(); // admin-posted jobs
-        long userApplications = repo.countUserApplications(); // user applications
-        long distinctUsers = repo.countDistinctUsersWithApplications(); // users with apps
+        long postedJobs = repo.countPostedJobsForAdmin();
+        // long userApplications = repo.countUserApplications();
+        long distinctUsers = repo.countDistinctUsersWithApplications();
         long distinctCompanies = repo.countDistinctPostedCompanies();
         long usersWithOffers = repo.countDistinctUsersWithOffers();
-        
+
         Map<String, Object> stats = new LinkedHashMap<>();
-        stats.put("totalJobs", postedJobs);         // rename to match frontend
+        stats.put("totalJobs", postedJobs);
         stats.put("usersApplied", distinctUsers);
-        stats.put("totalCompanies", distinctCompanies); // rename to match frontend
+        stats.put("totalCompanies", distinctCompanies);
         stats.put("usersWithOffers", usersWithOffers);
-        
+
         return stats;
     }
 
@@ -181,12 +181,10 @@ public class JobService {
     public Job applyToPublicJob(Long jobId, String username) {
         Job source = getJobById(jobId);
 
-        // Only public/admin posted jobs can be applied.
         if (!isPublicOrAdminPosted(source)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Public job not found");
         }
 
-        // Enforce availability window: posted day + next day, until 12 AM after next day.
         if (!isPublicJobActive(source, LocalDateTime.now())) {
             throw new ResponseStatusException(HttpStatus.GONE, "This job is inactive");
         }
@@ -229,7 +227,6 @@ public class JobService {
 
     private boolean isPublicJobActive(Job job, LocalDateTime now) {
         if (job.getCreatedAt() == null) return false;
-        // Job is active from createdAt until the end of the next day (23:59:59)
         LocalDate postedDate = job.getCreatedAt().toLocalDate();
         LocalDateTime expiresAt = postedDate.plusDays(1).atTime(23, 59, 59);
         return !now.isAfter(expiresAt);
@@ -240,7 +237,6 @@ public class JobService {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
         List<Job> jobs = repo.findByUserId(user.getId());
         Map<String, Long> counts = new LinkedHashMap<>();
-        // Ensure all statuses are present, even if 0
         List<String> statuses = List.of(
             "Online Test", "Group Discussion", "Technical Interview", "HR Interview", "Offer", "Rejected"
         );
