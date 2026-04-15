@@ -15,7 +15,10 @@ import java.util.Map;
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:5173")
+@CrossOrigin(origins = {
+    "http://localhost:5173",
+    "https://jobtracker-xv7i.vercel.app"
+})
 public class AuthController {
 
     private final UserRepository repo;

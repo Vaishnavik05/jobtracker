@@ -1,0 +1,16 @@
+# Ignore everything in target except app.jar
+target/*
+!target/app.jar
+
+.git/
+.gitignore
+*.iml
+.idea/
+*.md
+*.log
+
+node_modules
+*.db
+*.zip
+*.tar
+*.tar.gz

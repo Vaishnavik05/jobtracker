@@ -1,11 +1,11 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "http://localhost:8080",
+  baseURL: "https://job-portal-latest-ccvz.onrender.com",
 });
 
 api.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem("token");
+  const token = localStorage.getItem("token");
   if (token) {
     config.headers.Authorization = "Bearer " + token;
   }
