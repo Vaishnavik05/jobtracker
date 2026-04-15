@@ -21,10 +21,10 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/admin/events")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {
-    "http://localhost:5173",
-    "https://jobtracker-xv7i.vercel.app"
-})
+// @CrossOrigin(origins = {
+//     "http://localhost:5173",
+//     "https://jobtracker-xv7i.vercel.app"
+// })
 public class AdminEventController {
 
     private final CompanyEventRepository repo;

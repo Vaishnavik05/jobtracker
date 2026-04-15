@@ -24,10 +24,10 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/admin/applications")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {
-    "http://localhost:5173",
-    "https://jobtracker-xv7i.vercel.app"
-})
+// @CrossOrigin(origins = {
+//     "http://localhost:5173",
+//     "https://jobtracker-xv7i.vercel.app"
+// })
 public class AdminApplicationController {
 
     private final JobService jobService;
